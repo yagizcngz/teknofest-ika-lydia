@@ -1,0 +1,13 @@
+material HedefTahtasi
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture hedef.jpg
+      }
+    }
+  }
+}

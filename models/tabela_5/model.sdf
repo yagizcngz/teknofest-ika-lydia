@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="tabela_5">
+    <static>true</static>
+    <link name="link">
+      <pose>0 0 0 0 0 3.14159</pose>
+      <visual name="v">
+        <geometry><mesh><uri>model://tabela_5/tabela_5.dae</uri></mesh></geometry>
+      </visual>
+      <collision name="c">
+        <pose>0 0 0.7 0 0 0</pose>
+        <geometry><box><size>0.05 0.72 1.40</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

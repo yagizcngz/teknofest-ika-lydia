@@ -1,0 +1,13 @@
+material Material-Sayi5
+{
+  technique { pass {
+    texture_unit { texture sayi_13.png
+    filtering trilinear }
+  } }
+}
+material Material-Black
+{
+  technique { pass {
+    diffuse 0.05 0.05 0.05 1.0
+  } }
+}

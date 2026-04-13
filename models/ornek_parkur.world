@@ -1,0 +1,84 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="ika_parkur">
+
+    <!-- Fizik motoru ayarları -->
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <!-- Güneş ışığı -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- Zemin -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!--
+      ============================================
+      KAYAR ENGEL - Parkurun 6. aşaması
+      ============================================
+      Şartname 6.8:
+        - 1m genişliğinde engel
+        - 20 cm/s hızla sağa-sola git-gel
+        - Parkur dışına çıkınca beklemeden ters yön
+
+      pose: x y z roll pitch yaw
+        - x: Parkur ekseni boyunca engelin konumu
+              (kendi parkuruna göre ayarla)
+        - y: Parkurun ortası (0 ise engel ortadan başlar)
+        - z: Zemin seviyesi
+        - yaw: Engelin parkura dik mi paralel mi olduğu
+               (parkurun yönüne göre ayarla)
+    -->
+    <include>
+      <uri>model://kayar_engel</uri>
+      <!-- BURAYA KENDİ PARKURUNA GÖRE KONUM GİR -->
+      <pose>15.0 0 0 0 0 0</pose>
+      <name>kayar_engel_6</name>
+    </include>
+
+    <!--
+      ============================================
+      PARKURUN DİĞER AŞAMALARI
+      ============================================
+      Aşağıya kendi parkur modellerini ekle:
+
+      1. Su Geçişi ve Yağmur
+      2. Çakıllı/Taşlı Yol
+      3. Yan Eğim
+      4. Dik Engel
+      5. Trafik Konileri
+      6. Kayar Engel       (yukarıda eklendi)
+      7. Engebeli Arazi
+      8. Dik Eğimler + Atış Bölgesi
+      9. Hızlanma Parkuru
+    -->
+
+    <!-- Örnek: Yol bariyerleri (3m genişlik) -->
+    <!--
+    <model name="bariyer_sol">
+      <static>true</static>
+      <pose>10 -1.5 0.4 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>20 0.05 0.8</size></box></geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry><box><size>20 0.05 0.8</size></box></geometry>
+        </collision>
+      </link>
+    </model>
+    -->
+
+  </world>
+</sdf>

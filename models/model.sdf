@@ -1,0 +1,111 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+     <visual name="ic_siyah_vis">
+        <pose>0 0.041 1.0 1.5707 0 0</pose> 
+        <geometry><cylinder><radius>0.22</radius><length>0.005</length></cylinder></geometry>
+        
+        <material>
+          <script>
+            <uri>model://yarisma_parkuru/materials/scripts/tabelalar.material</uri>
+            <uri>model://yarisma_parkuru/materials/textures/</uri>
+            <name>Teknofest/Sayi7</name> </script>
+        </material>
+      </visual>
+  <model name="kayar_engel">
+    <static>false</static>
+
+    <!-- Sabit ray (görsel referans) -->
+    <link name="ray">
+      <pose>0 0 0.01 0 0 0</pose>
+      <visual name="ray_visual">
+        <geometry>
+          <box>
+            <size>0.05 3.0 0.02</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.3 0.3 0.3 1</ambient>
+          <diffuse>0.5 0.5 0.5 1</diffuse>
+        </material>
+      </visual>
+      <collision name="ray_collision">
+        <geometry>
+          <box>
+            <size>0.05 3.0 0.02</size>
+          </box>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>50.0</mass>
+        <inertia>
+          <ixx>37.5</ixx><iyy>0.004</iyy><izz>37.5</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+    </link>
+
+    <!-- Kayar engel bloğu (1m genişlik, ~0.5m yükseklik) -->
+    <link name="engel">
+      <pose>0 0 0.30 0 0 0</pose>
+      <visual name="engel_visual">
+        <geometry>
+          <box>
+            <size>0.15 1.0 0.50</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.2 0.0 1</ambient>
+          <diffuse>1.0 0.4 0.0 1</diffuse>
+        </material>
+      </visual>
+      <collision name="engel_collision">
+        <geometry>
+          <box>
+            <size>0.15 1.0 0.50</size>
+          </box>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>5.0</mass>
+        <inertia>
+          <ixx>0.52</ixx><iyy>0.01</iyy><izz>0.42</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+    </link>
+
+    <!-- Ray zemini sabitlemek için world joint -->
+    <joint name="ray_fix" type="fixed">
+      <parent>world</parent>
+      <child>ray</child>
+    </joint>
+
+    <!-- Engelin ray üzerinde kayması için prismatic joint (Y ekseni) -->
+    <joint name="engel_slide" type="prismatic">
+      <parent>ray</parent>
+      <child>engel</child>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <!-- Parkur genişliği 3m, engel 1m: -1.5 ile +1.5 arası hareket -->
+          <lower>-1.5</lower>
+          <upper>1.5</upper>
+          <effort>100</effort>
+          <velocity>0.3</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.5</damping>
+          <friction>0.0</friction>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <!-- Kayar engel hareket plugin'i: 20 cm/s git-gel -->
+    <plugin name="kayar_engel_hareketi" filename="libkayar_engel_plugin.so">
+      <speed>0.20</speed>           <!-- 20 cm/s -->
+      <lower_limit>-1.5</lower_limit>  <!-- Sol sinir (metre) -->
+      <upper_limit>1.5</upper_limit>   <!-- Sag sinir (metre) -->
+    </plugin>
+
+  </model>
+</sdf>
