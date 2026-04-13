@@ -1,1 +1,2 @@
+*.dae filter=lfs diff=lfs merge=lfs -text
 models/yarisma_parkuru/tasli_cakilli_yol.dae filter=lfs diff=lfs merge=lfs -text
