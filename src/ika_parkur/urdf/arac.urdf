@@ -21,7 +21,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="1.5708 0 0"/>
       <geometry>
-        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/meshes/govde.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/src/ika_parkur/meshes/govde.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="blue"/>
     </visual>
@@ -49,7 +49,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/src/ika_parkur/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="siyah"/>
     </visual>
@@ -83,7 +83,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/src/ika_parkur/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="siyah"/>
     </visual>
@@ -116,7 +116,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/src/ika_parkur/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="siyah"/>
     </visual>
@@ -149,7 +149,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="file:///home/bugra16/ika_ws/src/teknofest_ika/src/ika_parkur/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="siyah"/>
     </visual>
