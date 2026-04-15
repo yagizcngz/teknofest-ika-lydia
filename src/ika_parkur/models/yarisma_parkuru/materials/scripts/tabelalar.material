@@ -40,20 +40,7 @@ material Teknofest/Sayi10
     }
   }
 }
-material Teknofest/Sayi9
-{
-  technique
-  {
-    pass
-    {
-      texture_unit
-      {
-        texture sayi_9.png
-        scale 1.0 1.0
-      }
-    }
-  }
-}
+
 material Teknofest/Sayi8
 {
   technique
@@ -66,6 +53,20 @@ material Teknofest/Sayi8
       {
         texture sayi_8.png
         filtering trilinear
+      }
+    }
+  }
+}
+material Teknofest/Sayi9
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture sayi_9.png
+        scale 1.0 1.0
       }
     }
   }
