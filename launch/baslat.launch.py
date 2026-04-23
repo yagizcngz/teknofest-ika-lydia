@@ -36,7 +36,7 @@ def generate_launch_description():
         package='gazebo_ros',
         executable='spawn_entity.py',
         arguments=['-topic', 'robot_description', '-entity', 'teknofest_araci',
-                   '-x', '0.0', '-y', '0.0', '-z', '0.5'],
+                   '-x', '0.0', '-y', '0.0', '-z', '0.1'],
         output='screen'
     )
 
@@ -56,6 +56,7 @@ def generate_launch_description():
             'max_laser_range': 20.0,
             'resolution': 0.05,
             'transform_timeout': 0.5,
+            'message_filter_queue_size': 20,
         }]
     )
 
