@@ -1,0 +1,88 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="engebeli_arazi">
+    <static>true</static>
+
+    <!-- Tumsek 1 - Alt genis kisim (20cm genis, 3cm yuksek, 3m uzun) -->
+    <link name="t1_alt">
+      <visual name="v"><pose>-1.20 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>-1.20 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry></collision>
+    </link>
+    <!-- Tumsek 1 - Ust dar kisim (10cm genis, 2cm yuksek = toplam 5cm) -->
+    <link name="t1_ust">
+      <visual name="v"><pose>-1.20 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>-1.20 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry></collision>
+    </link>
+
+    <!-- Tumsek 2 -->
+    <link name="t2_alt">
+      <visual name="v"><pose>-0.60 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>-0.60 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry></collision>
+    </link>
+    <link name="t2_ust">
+      <visual name="v"><pose>-0.60 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>-0.60 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry></collision>
+    </link>
+
+    <!-- Tumsek 3 -->
+    <link name="t3_alt">
+      <visual name="v"><pose>0.00 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>0.00 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry></collision>
+    </link>
+    <link name="t3_ust">
+      <visual name="v"><pose>0.00 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>0.00 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry></collision>
+    </link>
+
+    <!-- Tumsek 4 -->
+    <link name="t4_alt">
+      <visual name="v"><pose>0.60 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>0.60 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry></collision>
+    </link>
+    <link name="t4_ust">
+      <visual name="v"><pose>0.60 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>0.60 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry></collision>
+    </link>
+
+    <!-- Tumsek 5 -->
+    <link name="t5_alt">
+      <visual name="v"><pose>1.20 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>1.20 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 3.0 0.03</size></box></geometry></collision>
+    </link>
+    <link name="t5_ust">
+      <visual name="v"><pose>1.20 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Grey</name></script></material></visual>
+      <collision name="c"><pose>1.20 0 0.04 0 0 0</pose>
+        <geometry><box><size>0.10 3.0 0.02</size></box></geometry></collision>
+    </link>
+
+  </model>
+</sdf>

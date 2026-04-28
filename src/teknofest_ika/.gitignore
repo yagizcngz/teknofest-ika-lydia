@@ -1,0 +1,23 @@
+# Gazebo plugin derleme artifaktları
+models/build/
+src/ika_parkur/models/build/
+*.so
+*.so.*
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Gazebo
+*.world.save
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Editor
+*.swp
+*.swo
+.vscode/settings.json

@@ -1,0 +1,536 @@
+<?xml version="1.0"?>
+<robot name="teknofest_ika">
+
+  <material name="sari"><color rgba="1.0 0.76 0.03 1"/></material>
+  <material name="siyah"><color rgba="0.15 0.15 0.15 1"/></material>
+  <material name="blue"><color rgba="0.0 0.0 0.8 1"/></material>
+  <material name="gri"><color rgba="0.4 0.4 0.4 1"/></material>
+  <material name="yesil"><color rgba="0.0 0.8 0.0 1"/></material>
+
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.28" rpy="0 0 0"/>
+    <!--
+      Z=0.28: tekerlek yarıçapı (0.18) + zemin boşluğu (0.10)
+      Böylece tekerlekler tam yere oturur.
+    -->
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <mesh filename="package://teknofest_ika/meshes/govde.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <box size="1.0 0.5 0.3"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="70.0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10.0" ixy="0" ixz="0" iyy="20.0" iyz="0" izz="30.0"/>
+    </inertial>
+  </link>
+
+  <!-- ═══════════════════════════════════════════════
+       SAĞ ÖN TEKERLEK
+  ════════════════════════════════════════════════ -->
+  <link name="sag_on_teker">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="siyah"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder length="0.15" radius="0.18"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="7.5"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <inertia ixx="0.0563" ixy="0" ixz="0" iyy="0.0563" iyz="0" izz="0.1013"/>
+    </inertial>
+  </link>
+  <joint name="sag_on_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="sag_on_teker"/>
+    <origin xyz="0.50 -0.335 -0.10" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════════════
+       SOL ÖN TEKERLEK
+  ════════════════════════════════════════════════ -->
+  <link name="sol_on_teker">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="siyah"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder length="0.15" radius="0.18"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="7.5"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <inertia ixx="0.0563" ixy="0" ixz="0" iyy="0.0563" iyz="0" izz="0.1013"/>
+    </inertial>
+  </link>
+  <joint name="sol_on_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="sol_on_teker"/>
+    <origin xyz="0.50 0.320 -0.10" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════════════
+       SOL ARKA TEKERLEK
+  ════════════════════════════════════════════════ -->
+  <link name="sol_arka_teker">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="siyah"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder length="0.15" radius="0.18"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="7.5"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <inertia ixx="0.0563" ixy="0" ixz="0" iyy="0.0563" iyz="0" izz="0.1013"/>
+    </inertial>
+  </link>
+  <joint name="sol_arka_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="sol_arka_teker"/>
+    <origin xyz="-0.60 0.320 -0.10" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════════════
+       SAĞ ARKA TEKERLEK
+  ════════════════════════════════════════════════ -->
+  <link name="sag_arka_teker">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://teknofest_ika/meshes/tekerlek.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="siyah"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder length="0.15" radius="0.18"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="7.5"/>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <inertia ixx="0.0563" ixy="0" ixz="0" iyy="0.0563" iyz="0" izz="0.1013"/>
+    </inertial>
+  </link>
+  <joint name="sag_arka_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="sag_arka_teker"/>
+    <origin xyz="-0.60 -0.335 -0.10" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- ═══════════════════════════════════════════════
+       DIFF DRIVE PLUGIN
+       wheel_separation = 0.335 * 2 = 0.670
+       wheel_diameter   = 0.18  * 2 = 0.360
+  ════════════════════════════════════════════════ -->
+  <gazebo>
+    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <ros><namespace>/</namespace></ros>
+      <update_rate>50</update_rate>
+      <num_wheel_pairs>2</num_wheel_pairs>
+      <left_joint>sol_on_joint</left_joint>
+      <right_joint>sag_on_joint</right_joint>
+      <left_joint>sol_arka_joint</left_joint>
+      <right_joint>sag_arka_joint</right_joint>
+      <wheel_separation>0.670</wheel_separation>
+      <wheel_diameter>0.360</wheel_diameter>
+      <max_wheel_torque>200</max_wheel_torque>
+      <max_wheel_acceleration>3.0</max_wheel_acceleration>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>false</publish_odom_tf>
+      <robot_base_frame>base_footprint</robot_base_frame>
+    </plugin>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       LİDAR LİNKİ — YDLidar Tmini Pro (2D)
+       Araç üst orta — /scan topic
+  ════════════════════════════════════════════════ -->
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.05" radius="0.05"/></geometry>
+      <material name="siyah"/>
+    </visual>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.0 0 0.30" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="lidar_link">
+    <sensor type="ray" name="lidar_sensor">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>true</visualize>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.10</min>
+          <max>30.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="lidar_plugin" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=/scan</remapping>
+        </ros>
+        <output_type>sensor_msgs/LaserScan</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       OS30A LİNKİ — YDLidar OS30A (3D LiDAR)
+       Malzeme listesi: "engel sakınma kabiliyetini artırma"
+       Tmini Pro'nun 5cm önüne, aynı yüksekliğe monteli
+       /os30a/points → PointCloud2
+  ════════════════════════════════════════════════ -->
+  <link name="os30a_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.06" radius="0.04"/></geometry>
+      <material name="siyah"/>
+    </visual>
+    <inertial>
+      <mass value="0.15"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+  <joint name="os30a_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="os30a_link"/>
+    <!--
+      X: +0.10  → Tmini Pro'dan (x=0.0) hafif öne
+      Z: +0.38  → 2D lidar'dan (z=0.30) 8cm yukarı, gövde üstünde
+    -->
+    <origin xyz="0.10 0 0.38" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="os30a_link">
+    <!--
+      YDLidar OS30A: 32 kanal, ±15° dikey FoV, 360° yatay
+      Gazebo Classic "ray" sensor ile 32-layer simülasyonu:
+      vertical samples = 32 → her 0.9375° bir ring
+    -->
+    <sensor type="ray" name="os30a_sensor">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+          <vertical>
+            <!-- 32 kanal, ±15° dikey açı aralığı -->
+            <samples>32</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.26180</min_angle>  <!-- -15° -->
+            <max_angle>0.26180</max_angle>   <!-- +15° -->
+          </vertical>
+        </scan>
+        <range>
+          <min>0.20</min>
+          <max>30.0</max>
+          <resolution>0.02</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </ray>
+      <plugin name="os30a_plugin" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=/os30a/points</remapping>
+        </ros>
+        <output_type>sensor_msgs/PointCloud2</output_type>
+        <frame_name>os30a_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       IMU LİNKİ — MPU9250
+       Gövde merkezinde, /imu/data
+  ════════════════════════════════════════════════ -->
+  <link name="imu_link">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="imu_link">
+    <sensor type="imu" name="imu_sensor">
+      <update_rate>100</update_rate>
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <ros>
+          <remapping>~/out:=/imu/data</remapping>
+        </ros>
+        <initial_orientation_as_reference>false</initial_orientation_as_reference>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       KAMERA 1: İLERİ SÜRÜŞ KAMERASI
+       Microcase 720P Webcam — §6.12 zorunlu
+       Araç ön paneli, merkez üst
+       /ileri_kamera/image_raw
+  ════════════════════════════════════════════════ -->
+  <link name="kamera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.08 0.04"/></geometry>
+      <material name="siyah"/>
+    </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="kamera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="kamera_link"/>
+    <!-- Araç gövdesi collision box ön yüzü x=+0.5, kamera bunun 5cm önünde -->
+    <origin xyz="0.55 0.0 0.20" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="kamera_link">
+    <sensor type="camera" name="ileri_kamera_sensor">
+      <update_rate>30</update_rate>
+      <camera name="ileri_kamera">
+        <!-- 720P Webcam yaklaşık 80° HFoV -->
+        <horizontal_fov>1.3962634</horizontal_fov>
+        <image>
+          <width>1280</width>
+          <height>720</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip><near>0.02</near><far>50.0</far></clip>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.007</stddev>
+        </noise>
+      </camera>
+      <plugin name="ileri_kamera_plugin" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>~/image_raw:=/ileri_kamera/image_raw</remapping>
+          <remapping>~/camera_info:=/ileri_kamera/camera_info</remapping>
+        </ros>
+        <camera_name>ileri_kamera</camera_name>
+        <frame_name>kamera_link</frame_name>
+        <hack_baseline>0.0</hack_baseline>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       KAMERA 2: GERİ SÜRÜŞ KAMERASI
+       Microcase 720P Webcam — §6.12 zorunlu
+       Araç arka paneli, yaw=π ile arkaya bakar
+       /geri_kamera/image_raw
+  ════════════════════════════════════════════════ -->
+  <link name="geri_kamera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.08 0.04"/></geometry>
+      <material name="siyah"/>
+    </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="geri_kamera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="geri_kamera_link"/>
+    <!-- Araç arka yüzü x=-0.5, kamera 5cm dışarıda; yaw=π → -X yönüne bakar -->
+    <origin xyz="-0.55 0.0 0.20" rpy="0 0 3.14159"/>
+  </joint>
+
+  <gazebo reference="geri_kamera_link">
+    <sensor type="camera" name="geri_kamera_sensor">
+      <update_rate>30</update_rate>
+      <camera name="geri_kamera">
+        <horizontal_fov>1.3962634</horizontal_fov>
+        <image>
+          <width>1280</width>
+          <height>720</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip><near>0.02</near><far>50.0</far></clip>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.007</stddev>
+        </noise>
+      </camera>
+      <plugin name="geri_kamera_plugin" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>~/image_raw:=/geri_kamera/image_raw</remapping>
+          <remapping>~/camera_info:=/geri_kamera/camera_info</remapping>
+        </ros>
+        <camera_name>geri_kamera</camera_name>
+        <frame_name>geri_kamera_link</frame_name>
+        <hack_baseline>0.0</hack_baseline>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       KAMERA 3: NİŞAN KAMERASI — IMX258 OIS
+       Pan-tilt taret üzerinde, araç üst merkezi
+       HFoV = 2·arctan(4.60/(2·3.67)) ≈ 68.1° = 1.189 rad
+       /nisan_kamera/image_raw
+  ════════════════════════════════════════════════ -->
+  <link name="nisan_kamera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.03 0.03 0.03"/></geometry>
+      <material name="gri"/>
+    </visual>
+    <inertial>
+      <mass value="0.02"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+  <joint name="nisan_kamera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="nisan_kamera_link"/>
+    <!--
+      Pan-tilt taret konumu: gövde üstü merkezi
+      Gerçek sistemde bu joint revolute (servo) olacak.
+      Simülasyonda fixed → şartname §6.12 karşılıyor.
+    -->
+    <origin xyz="0.05 0.0 0.38" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="nisan_kamera_link">
+    <sensor type="camera" name="nisan_kamera_sensor">
+      <update_rate>30</update_rate>
+      <camera name="nisan_kamera">
+        <!-- IMX258 OIS: f=3.67mm, sensor=4.60mm → HFoV≈68.1° = 1.1886 rad -->
+        <horizontal_fov>1.1886</horizontal_fov>
+        <image>
+          <!-- IMX258 native: 4208×3120, simülasyonda 1080p yeterli -->
+          <width>1920</width>
+          <height>1080</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip><near>0.10</near><far>100.0</far></clip>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.003</stddev>
+        </noise>
+      </camera>
+      <plugin name="nisan_kamera_plugin" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>~/image_raw:=/nisan_kamera/image_raw</remapping>
+          <remapping>~/camera_info:=/nisan_kamera/camera_info</remapping>
+        </ros>
+        <camera_name>nisan_kamera</camera_name>
+        <frame_name>nisan_kamera_link</frame_name>
+        <hack_baseline>0.0</hack_baseline>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ═══════════════════════════════════════════════
+       LAZER İŞARETLEYİCİ — 520nm 5mW Yeşil Nokta Lazer
+       Malzeme: "520nm 5mW 3-5V Yeşil Nokta Lazer Modülü x2"
+       Şartname §6.12: "lazer işaretleyici bulunması zorunludur"
+       Nişan kamerası ile aynı taret üzerinde, 2cm yana ofset
+       Gazebo'da Gazebo'da aktif lazer ışını simüle edilmez;
+       link + TF tree varlığı şartname maddesini karşılar.
+  ════════════════════════════════════════════════ -->
+  <link name="lazer_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.04" radius="0.008"/></geometry>
+      <material name="yesil"/>
+    </visual>
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+  <joint name="lazer_joint" type="fixed">
+    <parent link="nisan_kamera_link"/>
+    <child link="lazer_link"/>
+    <!-- Kameranın 2cm sağına, aynı yüksekliğe monte -->
+    <origin xyz="0.0 -0.02 0.0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

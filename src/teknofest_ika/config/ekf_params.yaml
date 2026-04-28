@@ -1,0 +1,97 @@
+### ekf_params.yaml — robot_localization EKF Konfigürasyonu
+#
+# Füzyon kaynakları:
+#   odom0 : /odom        → diff_drive plugin tekerlek odometrisi
+#   imu0  : /imu/data    → MPU9250 (yaw + vyaw + ax)
+#
+# Çıkış: /odometry/filtered → Nav2 bt_navigator tarafından kullanılır
+#
+# EKF durum vektörü (15 boyut):
+#   [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+#
+# İKA bir kara aracı → two_d_mode: true
+#   Z, roll, pitch sabitlenir; yalnızca 2D navigasyon yapılır.
+#   Bu mod gürültü kaynaklı dikey drift'i önler.
+#
+# Matematiksel gerekçe:
+#   EKF predict adımında Q (process noise) ile state kovaryansı
+#   büyür, update adımında Kalman kazancı K = P*H^T * (H*P*H^T + R)^-1
+#   ile IMU/odom ölçümleri sisteme entegre edilir.
+#   two_d_mode sıfırlar: P[z]=P[roll]=P[pitch]=0 → kararlı 2D tahmin
+
+ekf_filter_node:
+  ros__parameters:
+
+    # ── Temel parametreler ────────────────────────────────────────────
+    frequency: 30.0             # EKF güncelleme frekansı [Hz]
+    sensor_timeout: 0.1         # Sensör zaman aşımı [s]
+    two_d_mode: true            # Kara aracı: Z/roll/pitch dondurulur
+    publish_tf: true            # odom → base_link TF yayınla
+
+    # ── Frame tanımları ───────────────────────────────────────────────
+    world_frame: odom           # Lokal EKF: odom frame çıkışı
+    odom_frame: odom
+    base_link_frame: base_footprint
+    map_frame: map
+
+    # ── Kaynak 0: Tekerlek Odometrisi (/odom) ────────────────────────
+    # diff_drive plugin → pozisyon (x,y) + hız (vx, vyaw) sağlar
+    # vy sıfır kısıtı: yan kayma olmayan diferansiyel sürüş
+    odom0: /odom
+    odom0_config: [true,  true,  false,   # x,     y,     z
+                   false, false, true,    # roll,  pitch, yaw
+                   true,  false, false,   # vx,    vy,    vz
+                   false, false, true,    # vroll, vpitch,vyaw
+                   false, false, false]   # ax,    ay,    az
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # ── Kaynak 1: IMU — MPU9250 (/imu/data) ──────────────────────────
+    # Kullanılan ölçümler:
+    #   yaw (heading)      → magnetometre + jiroskop kaynaklı
+    #   vyaw (yaw rate)    → jiroskop Z ekseni
+    #   ax (ileriye ivme)  → ivmeölçer X ekseni
+    #
+    # Kullanılmayanlar:
+    #   roll/pitch         → zemin aracında anlamsız drift kaynağı
+    #   vy, vz, vroll, vpitch → two_d_mode zaten sıfırlar
+    #   ay, az             → yerçekimi bileşeni içerir, gürültü ekler
+    #
+    # imu0_remove_gravitational_acceleration: az eksenindeki 9.81 m/s²
+    # yerçekimi kaldırılır; aksi hâlde EKF dikey ivme hatası birikir.
+    imu0: /imu/data
+    imu0_config: [false, false, false,   # x,     y,     z
+                  false, false, true,    # roll,  pitch, yaw (sadece yaw)
+                  false, false, false,   # vx,    vy,    vz
+                  false, false, true,    # vroll, vpitch,vyaw (sadece vyaw)
+                  true,  false, false]   # ax,    ay,    az  (sadece ax)
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true
+
+    # ── Proses Gürültü Kovaryansı (Q matrisi — 15x15) ─────────────────
+    # Küçük değer → modele güven yüksek
+    # Büyük değer → ölçüme güven yüksek
+    # Pozisyon (x,y): 0.05 — orta güven
+    # Yaw: 0.06 — sürüş sırasında hafif sapma beklenir
+    # Hız (vx): 0.025 — motor komutları iyi kalibre
+    # Yaw hızı: 0.02 — jiroskop kararlı
+    process_noise_covariance: [
+      0.05,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.05,  0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.06,  0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.03,  0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.03,  0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.06,  0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.025,  0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.025,  0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.04,  0.0,   0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.01,  0.0,   0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.01,  0.0,    0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.02,   0.0,   0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.01,  0.0,   0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.01,  0.0,
+      0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,    0.0,   0.0,   0.015
+    ]
