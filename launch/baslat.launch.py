@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_directory('teknofest_ika')
 
-    set_model_path = AppendEnvironmentVariable('GAZEBO_MODEL_PATH', os.path.join(pkg_share, 'models'))
+    set_model_path = AppendEnvironmentVariable('GAZEBO_MODEL_PATH', '/home/bugra16/ika_ws/models:' + os.path.join(pkg_share, 'models'))
     set_plugin_path = AppendEnvironmentVariable('GAZEBO_PLUGIN_PATH', '/home/bugra16/ika_ws/plugins')
 
     world_file = os.path.join(pkg_share, 'worlds', 'yarisma.world')
@@ -43,20 +43,20 @@ def generate_launch_description():
     # ← YENİ: SLAM Toolbox node tanımı
     slam_node = Node(
         package='slam_toolbox',
-        executable='sync_slam_toolbox_node',
+        executable='async_slam_toolbox_node',
         name='slam_toolbox',
         output='screen',
         parameters=[{
             'use_sim_time': True,
             'odom_frame': 'odom',
             'map_frame': 'map',
-            'base_frame': 'base_link',
+            'base_frame': 'base_footprint',
             'scan_topic': '/scan',
             'mode': 'mapping',
             'max_laser_range': 20.0,
             'resolution': 0.05,
             'transform_timeout': 0.5,
-            'message_filter_queue_size': 20,
+            'message_filter_queue_size': 50,
         }]
     )
 
@@ -66,27 +66,10 @@ def generate_launch_description():
         executable='ekf_node',
         name='ekf_filter_node',
         output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'frequency': 30.0,
-            'sensor_timeout': 0.1,
-            'odom0': '/odom',
-            'imu0': '/imu/data',
-            'odom0_config': [
-                True, True, False,   # x, y, z
-                False, False, True,  # roll, pitch, yaw
-                True, True, False,   # vx, vy, vz
-                False, False, True,  # vroll, vpitch, vyaw
-                False, False, False  # ax, ay, az
-            ],
-            'imu0_config': [
-                False, False, False,
-                True,  True,  True,
-                False, False, False,
-                True,  True,  True,
-                True,  True,  True
-            ],
-        }]
+        parameters=[
+            os.path.join(pkg_share, 'config', 'ekf.yaml'),
+            {'use_sim_time': True}
+        ]
     )
 
     return LaunchDescription([
