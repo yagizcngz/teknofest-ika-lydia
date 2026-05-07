@@ -41,6 +41,11 @@ setup(
             'anti_rollback        = teknofest_ika.otonomi.anti_rollback:main',
             'imu_guvenlik         = teknofest_ika.otonomi.imu_guvenlik:main',
             'kayar_engel_kalman   = teknofest_ika.gorsel.kayar_engel_kalman:main',
+            'kayar_engel_costmap  = teknofest_ika.gorsel.kayar_engel_costmap:main',
+            'mod_yoneticisi       = teknofest_ika.otonomi.mod_yoneticisi:main',
+            'koni_costmap         = teknofest_ika.gorsel.koni_costmap:main',
+            'e_stop_node          = teknofest_ika.otonomi.e_stop_node:main',
+            'lora_gcs             = teknofest_ika.gomulu.lora_gcs:main',
         ],
     },
 )
