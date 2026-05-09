@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  lydia_sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lydia_sim:latest
+    container_name: lydia_sim
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - IKA_WS=/root/ika_ws
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - .:/root/ika_ws/src/teknofest_ika:rw
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        cd /root/ika_ws &&
+        colcon build --symlink-install --packages-select teknofest_ika &&
+        source install/setup.bash &&
+        echo 'LYDIA simulasyon container hazir. Launch komutu:' &&
+        echo '  ros2 launch teknofest_ika test_simulasyon.launch.py' &&
+        /bin/bash
+      "
