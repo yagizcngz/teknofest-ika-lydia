@@ -61,8 +61,14 @@ jobs:
         run: |
           apt-get update && apt-get install -y python3-flake8
           cd ~/ika_ws/src/teknofest_ika
-          python3 -m flake8 teknofest_ika scripts test --count --select=E9,F63,F7,F82 --show-source --statistics
-          python3 -m flake8 teknofest_ika scripts test --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
+          # Sadece var olan dizinleri lint et
+          LINT_DIRS=""
+          for d in teknofest_ika scripts test; do
+            [ -d "$d" ] && LINT_DIRS="$LINT_DIRS $d"
+          done
+          echo "Lint edilecek dizinler: $LINT_DIRS"
+          python3 -m flake8 $LINT_DIRS --count --select=E9,F63,F7,F82 --show-source --statistics
+          python3 -m flake8 $LINT_DIRS --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
       - name: Upload test results
         if: always()
