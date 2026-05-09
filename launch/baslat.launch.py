@@ -9,8 +9,7 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('teknofest_ika')
 
     set_model_path = AppendEnvironmentVariable('GAZEBO_MODEL_PATH', os.path.join(pkg_share, 'models'))
-    ika_ws = os.environ.get('IKA_WS', os.path.expanduser('~/ika_ws'))
-    set_plugin_path = AppendEnvironmentVariable('GAZEBO_PLUGIN_PATH', os.path.join(ika_ws, 'plugins'))
+    set_plugin_path = AppendEnvironmentVariable('GAZEBO_PLUGIN_PATH', '/home/bugra16/ika_ws/plugins')
 
     world_file = os.path.join(pkg_share, 'worlds', 'yarisma.world')
 

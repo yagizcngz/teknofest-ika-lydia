@@ -6,7 +6,7 @@ package_name = 'teknofest_ika'
 
 setup(
     name=package_name,
-    version='0.1.0',
+    version='0.0.0',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -69,13 +69,7 @@ setup(
         # (ekf.yaml, nav2_params.yaml burada)
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
-    install_requires=[
-        'setuptools',
-        'pyserial>=3.5',
-        'PyYAML>=5.4.0',
-        'numpy>=1.21.0',
-        'opencv-python>=4.5.0',
-    ],
+    install_requires=['setuptools'],
     zip_safe=True,
     maintainer='bugra16',
     maintainer_email='ozturkbugra684@gmail.com',

@@ -1,8 +1,0 @@
-# Python bağımlılıkları (pip ile kurulur)
-# ROS 2 bağımlılıkları rosdep ile yönetilir
-
-setuptools>=45.0
-pyserial>=3.5
-numpy>=1.21.0
-opencv-python>=4.5.0
-PyYAML>=5.4.0
