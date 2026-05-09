@@ -59,10 +59,10 @@ jobs:
       - name: Lint with flake8
         shell: bash
         run: |
-          pip3 install flake8
+          apt-get update && apt-get install -y python3-flake8
           cd ~/ika_ws/src/teknofest_ika
-          flake8 teknofest_ika scripts test --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 teknofest_ika scripts test --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
+          python3 -m flake8 teknofest_ika scripts test --count --select=E9,F63,F7,F82 --show-source --statistics
+          python3 -m flake8 teknofest_ika scripts test --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
       - name: Upload test results
         if: always()
