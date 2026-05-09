@@ -1,0 +1,72 @@
+name: LYDIA IKA CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    container:
+      image: osrf/ros:humble-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup workspace
+        run: |
+          mkdir -p ~/ika_ws/src
+          cp -r . ~/ika_ws/src/teknofest_ika
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y python3-pip python3-venv
+          pip3 install -r ~/ika_ws/src/teknofest_ika/requirements.txt
+
+      - name: rosdep install
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          cd ~/ika_ws
+          rosdep update || true
+          rosdep install --from-paths src --ignore-src -y || true
+
+      - name: colcon build
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          cd ~/ika_ws
+          colcon build --symlink-install --packages-select teknofest_ika
+
+      - name: colcon test
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          source ~/ika_ws/install/setup.bash
+          cd ~/ika_ws
+          colcon test --packages-select teknofest_ika
+          colcon test-result --verbose
+
+      - name: Unit tests (hardware-free)
+        shell: bash
+        run: |
+          cd ~/ika_ws/src/teknofest_ika
+          python3 test/test_birim.py
+
+      - name: Lint with flake8
+        shell: bash
+        run: |
+          pip3 install flake8
+          cd ~/ika_ws/src/teknofest_ika
+          flake8 teknofest_ika scripts test --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 teknofest_ika scripts test --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ~/ika_ws/build/teknofest_ika/test_results/
