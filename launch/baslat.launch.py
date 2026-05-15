@@ -8,8 +8,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_directory('teknofest_ika')
 
-    set_model_path = AppendEnvironmentVariable('GAZEBO_MODEL_PATH', '/home/bugra16/ika_ws/models:' + os.path.join(pkg_share, 'models'))
-    set_plugin_path = AppendEnvironmentVariable('GAZEBO_PLUGIN_PATH', '/home/bugra16/ika_ws/plugins')
+    ws_root = os.path.abspath(os.path.join(pkg_share, '..', '..', '..', '..'))
+    set_model_path = AppendEnvironmentVariable('GAZEBO_MODEL_PATH', os.path.join(ws_root, 'models') + ':' + os.path.join(pkg_share, 'models'))
+    set_plugin_path = AppendEnvironmentVariable('GAZEBO_PLUGIN_PATH', os.path.join(ws_root, 'plugins'))
 
     world_file = os.path.join(pkg_share, 'worlds', 'yarisma.world')
 
@@ -17,7 +18,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([
             os.path.join(get_package_share_directory('gazebo_ros'), 'launch', 'gazebo.launch.py')
         ]),
-        launch_arguments={'world': world_file, 'verbose': 'true'}.items()
+        launch_arguments={'world': world_file, 'verbose': 'false'}.items()
     )
 
     urdf_file = os.path.join(pkg_share, 'urdf', 'arac.urdf')
@@ -40,24 +41,14 @@ def generate_launch_description():
         output='screen'
     )
 
-    # ← YENİ: SLAM Toolbox node tanımı
+    slam_params = os.path.join(pkg_share, 'config', 'mapper_params_online_sync.yaml')
+
     slam_node = Node(
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
         name='slam_toolbox',
         output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'odom_frame': 'odom',
-            'map_frame': 'map',
-            'base_frame': 'base_footprint',
-            'scan_topic': '/scan',
-            'mode': 'mapping',
-            'max_laser_range': 20.0,
-            'resolution': 0.05,
-            'transform_timeout': 0.5,
-            'message_filter_queue_size': 50,
-        }]
+        parameters=[slam_params, {'use_sim_time': True}]
     )
 
     # ← YENİ: EKF node tanımı (odom + IMU füzyon)
@@ -78,6 +69,6 @@ def generate_launch_description():
         gazebo,
         robot_state_publisher,
         TimerAction(period=5.0, actions=[spawn_entity]),
-        TimerAction(period=8.0, actions=[slam_node]),   # ← YENİ: araç spawn'dan 3sn sonra başlar
-        TimerAction(period=12.0, actions=[ekf_node]),    # ← YENİ: aynı anda başlar
+        TimerAction(period=8.0, actions=[ekf_node]),
+        TimerAction(period=12.0, actions=[slam_node]),
     ])
