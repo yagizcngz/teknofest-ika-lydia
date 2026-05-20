@@ -43,6 +43,7 @@ setup(
         'console_scripts': [
             # ── Gömülü ─────────────────────────────────────────────────
             'seri_kopru           = teknofest_ika.gomulu.seri_kopru:main',
+            'test_arac_koprusu    = teknofest_ika.gomulu.test_arac_koprusu:main',
             'lora_gcs             = teknofest_ika.gomulu.lora_gcs:main',
             # ── Otonomi ────────────────────────────────────────────────
             'misyon_fsm           = teknofest_ika.otonomi.misyon_fsm:main',
