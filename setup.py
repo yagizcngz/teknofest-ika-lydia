@@ -66,6 +66,7 @@ setup(
             'targeting_node       = teknofest_ika.gorsel.targeting_node:main',
             'servo_controller_node= teknofest_ika.gorsel.servo_controller_node:main',
             'yolo_adapter_node    = teknofest_ika.gorsel.yolo_adapter_node:main',
+            'scan_relay           = teknofest_ika.gorsel.scan_relay:main',
         ],
     },
 )
