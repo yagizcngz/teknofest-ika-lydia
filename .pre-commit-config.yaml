@@ -11,7 +11,7 @@ repos:
           - --max-line-length=120
           - --max-complexity=15
           - --select=E9,F63,F7,F82,W291,W292,W293
-        files: ^(teknofest_ika|scripts|test)/
+        files: ^(teknofest_ika|scripts)/|^test_birim\.py$
         exclude: ^(models|maps|urdf|worlds|meshes|materials)/
 
   - repo: https://github.com/psf/black
@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: black
         language_version: python3
-        files: ^(teknofest_ika|scripts|test)/
+        files: ^(teknofest_ika|scripts)/|^test_birim\.py$
         exclude: ^(models|maps|urdf|worlds|meshes|materials)/
 
   - repo: https://github.com/pycqa/isort
@@ -27,5 +27,5 @@ repos:
     hooks:
       - id: isort
         args: ["--profile", "black"]
-        files: ^(teknofest_ika|scripts|test)/
+        files: ^(teknofest_ika|scripts)/|^test_birim\.py$
         exclude: ^(models|maps|urdf|worlds|meshes|materials)/

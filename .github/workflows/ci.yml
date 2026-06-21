@@ -54,18 +54,19 @@ jobs:
         shell: bash
         run: |
           cd ~/ika_ws/src/teknofest_ika
-          python3 test/test_birim.py
+          python3 test_birim.py
 
       - name: Lint with flake8
         shell: bash
         run: |
           apt-get update && apt-get install -y python3-flake8
           cd ~/ika_ws/src/teknofest_ika
-          # Sadece var olan dizinleri lint et
+          # Sadece var olan dizinleri/dosyaları lint et
           LINT_DIRS=""
-          for d in teknofest_ika scripts test; do
+          for d in teknofest_ika scripts; do
             [ -d "$d" ] && LINT_DIRS="$LINT_DIRS $d"
           done
+          [ -f "test_birim.py" ] && LINT_DIRS="$LINT_DIRS test_birim.py"
           echo "Lint edilecek dizinler: $LINT_DIRS"
           python3 -m flake8 $LINT_DIRS --count --select=E9,F63,F7,F82 --show-source --statistics
           python3 -m flake8 $LINT_DIRS --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics

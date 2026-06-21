@@ -1,7 +1,7 @@
 # LYDIA IKA -- ROS 2 Build & Test Automation
 # Kullanim: make <hedef>
 
-.PHONY: build test sim clean lint format install-deps
+.PHONY: build test harita arac clean lint format install-deps unit-test
 
 # --- Degiskenler ---
 PACKAGE       := teknofest_ika
@@ -20,10 +20,6 @@ test:
 	cd $(WORKSPACE) && colcon test --packages-select $(PACKAGE)
 	@echo "==> Test sonuclari:"
 	cd $(WORKSPACE) && colcon test-result --verbose
-
-sim:
-	@echo "==> Simulasyon baslatiliyor..."
-	ros2 launch $(PACKAGE) test_simulasyon.launch.py
 
 harita:
 	@echo "==> Haritalama modu baslatiliyor..."
@@ -46,8 +42,8 @@ lint:
 
 format:
 	@echo "==> black + isort calistiriliyor..."
-	black $(PACKAGE) scripts test || echo "black kurulu degil: pip install black"
-	isort $(PACKAGE) scripts test || echo "isort kurulu degil: pip install isort"
+	black $(PACKAGE) scripts test_birim.py || echo "black kurulu degil: pip install black"
+	isort $(PACKAGE) scripts test_birim.py || echo "isort kurulu degil: pip install isort"
 
 # --- Ortam Kurulumu ---
 
@@ -61,7 +57,7 @@ install-deps:
 
 unit-test:
 	@echo "==> Birim testleri calistiriliyor..."
-	cd $(WORKSPACE)/src/$(PACKAGE) && $(PYTHON) test/test_birim.py
+	cd $(WORKSPACE)/src/$(PACKAGE) && $(PYTHON) test_birim.py
 
 # --- Yardim ---
 
@@ -70,7 +66,6 @@ help:
 	@echo "  build        - colcon build --symlink-install"
 	@echo "  test         - colcon test + sonuc raporu"
 	@echo "  unit-test    - Donanim gerektirmeyen birim testleri"
-	@echo "  sim          - Simulasyon baslat (test_simulasyon.launch.py)"
 	@echo "  harita       - Haritalama modu baslat"
 	@echo "  arac         - Gercek arac modu baslat"
 	@echo "  clean        - build/install/log temizle"

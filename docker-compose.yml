@@ -1,5 +1,8 @@
 version: "3.8"
 
+# NOT: Bu proje artik Gazebo simulasyonu icermiyor (bkz. git log: "simulasyon
+# dosyalari kaldirildi") — container ismi/DISPLAY X11 yonlendirmesi RViz2
+# gorsellestirme ve haritalama (gercek_harita.launch.py) icin tutuluyor.
 services:
   lydia_sim:
     build:
@@ -24,7 +27,9 @@ services:
         cd /root/ika_ws &&
         colcon build --symlink-install --packages-select teknofest_ika &&
         source install/setup.bash &&
-        echo 'LYDIA simulasyon container hazir. Launch komutu:' &&
-        echo '  ros2 launch teknofest_ika test_simulasyon.launch.py' &&
+        echo 'LYDIA container hazir. Ornek launch komutlari:' &&
+        echo '  ros2 launch teknofest_ika gercek_harita.launch.py   # haritalama' &&
+        echo '  ros2 launch teknofest_ika gercek_arac.launch.py     # gercek arac' &&
+        echo '  ros2 launch teknofest_ika test_arac.launch.py       # test araci' &&
         /bin/bash
       "
