@@ -44,7 +44,7 @@ setup(
             # ── Gömülü ─────────────────────────────────────────────────
             'seri_kopru           = teknofest_ika.gomulu.seri_kopru:main',
             'test_arac_koprusu    = teknofest_ika.gomulu.test_arac_koprusu:main',
-            'lora_gcs             = teknofest_ika.gomulu.lora_gcs:main',
+            'taret_rc_koprusu     = teknofest_ika.gomulu.taret_rc_koprusu:main',
             # ── Otonomi ────────────────────────────────────────────────
             'misyon_fsm           = teknofest_ika.otonomi.misyon_fsm:main',
             'terrain_adapter      = teknofest_ika.otonomi.terrain_adapter:main',
@@ -67,6 +67,7 @@ setup(
             'servo_controller_node = teknofest_ika.gorsel.servo_controller_node:main',
             'yolo_adapter_node    = teknofest_ika.gorsel.yolo_adapter_node:main',
             'scan_relay           = teknofest_ika.gorsel.scan_relay:main',
+            'map_image_node       = teknofest_ika.gorsel.map_image_node:main',
         ],
     },
 )
