@@ -1,0 +1,35 @@
+version: "3.8"
+
+# NOT: Bu proje artik Gazebo simulasyonu icermiyor (bkz. git log: "simulasyon
+# dosyalari kaldirildi") — container ismi/DISPLAY X11 yonlendirmesi RViz2
+# gorsellestirme ve haritalama (gercek_harita.launch.py) icin tutuluyor.
+services:
+  lydia_sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lydia_sim:latest
+    container_name: lydia_sim
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - IKA_WS=/root/ika_ws
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - .:/root/ika_ws/src/teknofest_ika:rw
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        cd /root/ika_ws &&
+        colcon build --symlink-install --packages-select teknofest_ika &&
+        source install/setup.bash &&
+        echo 'LYDIA container hazir. Ornek launch komutlari:' &&
+        echo '  ros2 launch teknofest_ika gercek_harita.launch.py   # haritalama' &&
+        echo '  ros2 launch teknofest_ika gercek_arac.launch.py     # gercek arac' &&
+        echo '  ros2 launch teknofest_ika test_arac.launch.py       # test araci' &&
+        /bin/bash
+      "

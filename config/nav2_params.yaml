@@ -1,13 +1,13 @@
 ### nav2_params.yaml — LYDİA Nav2 Konfigürasyonu
 #
 # Araç: Ackermann kinematikli İKA
-#   Dingil arası       : 0.55 m
-#   İz genişliği       : 0.67 m
+#   Dingil arası       : 0.55 m   (PLACEHOLDER — wheelbase ölçülmedi)
+#   İz genişliği       : 0.90 m   (arka aks, EK-7 B)
 #   Max hız            : 3.0 m/s  (VESC sınırı)
 #   Max direksiyon açısı: 30°
-#   Min dönüş yarıçapı : L / tan(delta_max) = 0.55 / tan(30°) ≈ 0.95 m
+#   Min dönüş yarıçapı : L / tan(delta_max) = 0.55 / tan(30°) ≈ 0.95 m  (wheelbase placeholder)
 #
-# Planner  : SmacPlannerHybrid (Reeds-Shepp — Ackermann uyumlu)
+# Planner  : SmacPlannerHybrid (DUBIN — sadece ileri hareket, Ackermann uyumlu)
 # Controller: RegulatedPurePursuitController (RPP — Ackermann uyumlu)
 #
 # KURULUM:
@@ -27,21 +27,20 @@ bt_navigator:
   ros__parameters:
     use_sim_time: false
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     odom_topic: /odometry/filtered    # EKF çıkışı
     bt_loop_duration: 10
     default_server_timeout: 20
-    navigators: ['navigate_to_pose', 'navigate_through_poses']
+    navigators: ['navigate_to_pose']
     navigate_to_pose:
       plugin: "nav2_bt_navigator/NavigateToPoseNavigator"
-    navigate_through_poses:
-      plugin: "nav2_bt_navigator/NavigateThroughPosesNavigator"
+    default_nav_to_pose_bt_xml: "navigate_to_pose_w_replanning_and_recovery.xml"
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
       - nav2_smooth_path_action_bt_node
       - nav2_follow_path_action_bt_node
-      - nav2_spin_action_bt_node
+      # nav2_spin_action_bt_node kaldırıldı — Ackermann uyumsuz
       - nav2_wait_action_bt_node
       - nav2_back_up_action_bt_node
       - nav2_drive_on_heading_bt_node
@@ -64,7 +63,6 @@ bt_navigator:
       - nav2_round_robin_node_bt_node
       - nav2_transform_available_condition_bt_node
       - nav2_time_expired_condition_bt_node
-      - nav2_path_expiring_timer_condition
       - nav2_distance_traveled_condition_bt_node
       - nav2_single_trigger_bt_node
       - nav2_is_battery_low_condition_bt_node
@@ -81,7 +79,7 @@ controller_server:
     use_sim_time: false
     controller_frequency: 20.0     # Hz — RPP güncelleme frekansı
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
+    min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
@@ -90,13 +88,13 @@ controller_server:
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
-      movement_time_allowance: 10.0
+      required_movement_radius: 0.3
+      movement_time_allowance: 20.0
 
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25       # [m] — Hedefe varış toleransı
+      xy_goal_tolerance: 0.30       # [m] — waypoints.yaml hedef_tolerans_metre ile eşleştirildi
       yaw_goal_tolerance: 0.15      # [rad] ≈ 8.6°
 
     # ── Regulated Pure Pursuit Controller ────────────────────────────────
@@ -105,19 +103,20 @@ controller_server:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
 
       # Hız parametreleri
-      desired_linear_vel: 0.8           # Nominal hız [m/s] — araçta artırılacak
-      lookahead_dist: 1.5               # [m] — lookahead başlangıç mesafesi
-      min_lookahead_dist: 0.8           # [m] — minimum lookahead
-      max_lookahead_dist: 3.0           # [m] — maksimum lookahead
+      desired_linear_vel: 3.0            # Nominal hız [m/s]
+      lookahead_dist: 2.0               # [m] — lookahead başlangıç mesafesi
+      min_lookahead_dist: 1.2           # [m] — minimum lookahead
+      max_lookahead_dist: 4.0           # [m] — maksimum lookahead
       lookahead_time: 1.5               # [s] — hızla ölçeklenen lookahead
 
-      rotate_to_heading_angular_vel: 0.8   # Başlangıç yönlenmesi için [rad/s]
+      use_rotate_to_heading: false          # Ackermann yerinde dönemez — kapalı
+      rotate_to_heading_angular_vel: 0.8
       transform_tolerance: 0.2
 
       # Hız düzenleme
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
-      approach_velocity_scaling_dist: 1.0
+      approach_velocity_scaling_dist: 2.5
 
       # Eğrilik bazlı hız sınırlama
       # Ackermann aracın maksimum dönüş yarıçapı: ~0.95 m
@@ -125,16 +124,17 @@ controller_server:
       regulated_linear_scaling_min_radius: 1.0   # [m] — bu yarıçapın altında yavaşla
       regulated_linear_scaling_min_speed: 0.25   # [m/s] — minimum hız
 
-      # Engel durma
+      # Engel durma — taşlı yolda sert dur yerine yavaşla
+      use_collision_detection: false
       use_cost_regulated_linear_velocity_scaling: true
-      cost_scaling_dist: 0.5
+      cost_scaling_dist: 0.6
       cost_scaling_gain: 1.0
       inflation_cost_scaling_factor: 3.0
 
       # Ackermann kısıtı
       # max angular = v * tan(delta_max) / L = 3.0 * tan(30°) / 0.55 ≈ 3.14 rad/s
       # Güvenlik için 1.0 rad/s ile başla, araçta artır
-      max_angular_vel: 1.0             # [rad/s]
+      max_angular_vel: 1.8             # [rad/s]
       max_robot_pose_search_dist: 10.0
 
       use_interpolation: false
@@ -146,7 +146,7 @@ planner_server:
     planner_plugins: ["GridBased"]
 
     # ── SmacPlannerHybrid — Ackermann kinematik kısıtları destekler ──────
-    # Reeds-Shepp eğrisi: hem ileri hem geri manevra
+    # DUBIN eğrisi: sadece ileri hareket, Ackermann kinematik için uygun
     GridBased:
       plugin: "nav2_smac_planner/SmacPlannerHybrid"
       downsample_costmap: false
@@ -156,7 +156,7 @@ planner_server:
       max_iterations: 1000000
       max_on_approach_iterations: 1000
       max_planning_time: 5.0
-      motion_model_for_search: "REEDS_SHEPP"   # Ackermann uyumlu
+      motion_model_for_search: "DUBIN"          # Sadece ileri — geri manevra yok
       angle_quantization_bins: 72              # 5° çözünürlük
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
@@ -190,17 +190,17 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["backup", "drive_on_heading", "wait", "spin"]
+    # spin kaldırıldı — Ackermann araç yerinde dönemez, spin recovery çağrılırsa
+    # araç titreşir ve timeout'a girer. backup + drive_on_heading ile yeniden plan üretilir.
+    behavior_plugins: ["backup", "drive_on_heading", "wait"]
     backup:
       plugin: "nav2_behaviors/BackUp"
     drive_on_heading:
       plugin: "nav2_behaviors/DriveOnHeading"
     wait:
       plugin: "nav2_behaviors/Wait"
-    spin:
-      plugin: "nav2_behaviors/Spin"
     global_frame: odom
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     transform_tolerance: 0.2
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
@@ -215,10 +215,13 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
-      robot_base_frame: base_link
-      robot_radius: 0.40          # Yarıçap [m] — footprint yerine basit daire
+      robot_base_frame: base_footprint
+      robot_radius: 0.50
 
       resolution: 0.05            # [m/piksel] — 5 cm çözünürlük
+      rolling_window: true
+      width: 60                   # [m] — tüm parkur sığacak kadar geniş
+      height: 60                  # [m]
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
 
@@ -229,22 +232,59 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: scan
+        # koni_cloud (/cone_cloud, koni_costmap.py) kasıtlı olarak ÇIKARILDI:
+        # bu topic'in tek üreticisi /cone_positions PoseArray'i bekleyen
+        # koni_costmap.py'dir ve /cone_positions'a hiçbir node yayın yapmıyor
+        # — kaynak hep boş kalıyordu. Gerçek koni engeli yolo_cone_cloud
+        # (cone_fusion_node, LiDAR+YOLO füzyonu) üzerinden geliyor.
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
         scan:
-          topic: /scan
+          topic: /scan/filtered
           max_obstacle_height: 2.0
           clearing: true
           marking: true
           data_type: "LaserScan"
           raytrace_max_range: 8.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 7.5
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.50
+        yolo_cone_cloud:
+          topic: /costmap/cone_cloud
+          max_obstacle_height: 2.0
+          clearing: false
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 8.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 8.0
           obstacle_min_range: 0.0
+        moving_obs_cloud:
+          topic: /moving_obs_cloud
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          observation_persistence: 0.5
+        os30a_cloud:
+          topic: /apc/points/data_raw
+          min_obstacle_height: 0.05
+          max_obstacle_height: 1.50
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 6.0
+          raytrace_min_range: 0.1
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.1
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.55    # [m] — robot_radius + güvenlik payı
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.45
 
       always_send_full_costmap: true
 
@@ -256,8 +296,8 @@ local_costmap:
       update_frequency: 5.0
       publish_frequency: 2.0
       global_frame: odom
-      robot_base_frame: base_link
-      robot_radius: 0.40
+      robot_base_frame: base_footprint
+      robot_radius: 0.50          # global_costmap ile tutarlı
       rolling_window: true
       width: 8                    # [m] — lokal harita genişliği
       height: 8                   # [m] — lokal harita yüksekliği
@@ -268,22 +308,55 @@ local_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: scan
+        # koni_cloud çıkarıldı — bkz. global_costmap'teki açıklama (üreticisi yok).
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
         scan:
-          topic: /scan
+          topic: /scan/filtered
           max_obstacle_height: 2.0
           clearing: true
           marking: true
           data_type: "LaserScan"
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 4.5
+          obstacle_max_range: 1.5
+          obstacle_min_range: 0.50
+        yolo_cone_cloud:
+          topic: /costmap/cone_cloud
+          max_obstacle_height: 2.0
+          clearing: false
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 5.0
           obstacle_min_range: 0.0
+        moving_obs_cloud:
+          topic: /moving_obs_cloud
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          observation_persistence: 0.5
+        os30a_cloud:
+          topic: /apc/points/data_raw
+          min_obstacle_height: 0.05
+          max_obstacle_height: 1.50
+          clearing: true
+          marking: true
+          data_type: "PointCloud2"
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.1
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.1
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.45
 
       always_send_full_costmap: true
 
@@ -297,7 +370,7 @@ amcl:
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
-    base_frame_id: base_link
+    base_frame_id: base_footprint
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
@@ -317,7 +390,10 @@ amcl:
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
     resample_interval: 1
-    robot_model_type: nav2_amcl::OmniMotionModel  # Ackermann ≈ Omni (diff de kullanılabilir)
+    # Ackermann kinematikli gerçek araç — DifferentialMotionModel YANLIŞTI
+    # (bu dosya gercek_arac için; test_arac diferansiyel sürüşlü olduğundan
+    # nav2_params_test.yaml'da Differential doğru kalır).
+    robot_model_type: nav2_amcl::AckermannMotionModel
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
@@ -351,18 +427,11 @@ lifecycle_manager:
     use_sim_time: false
     autostart: true
     node_names:
-      - map_server
-      - amcl
       - controller_server
       - smoother_server
       - planner_server
       - behavior_server
       - bt_navigator
+      - velocity_smoother
 
-lifecycle_manager_localization:
-  ros__parameters:
-    use_sim_time: false
-    autostart: true
-    node_names:
-      - map_server
-      - amcl
+# lifecycle_manager_localization kaldırıldı — SLAM_Toolbox kullanılıyor, AMCL aktif değil.

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+anti_rollback.py — Geri Kayma Önleme Kontrolcüsü
+
+Dik eğimde aracın geri kaymasını tespit eder ve önler.
+Tespit: IMU pitch > topics.IMU_PITCH_RAMP_THRESHOLD VE odom hız < -0.05 m/s
+
+Komut mimarisi (race condition yoktur):
+  /anti_rollback/cmd   (Twist) → ackermann_converter okur, aktifken override yapar
+  /anti_rollback/aktif (Bool)  → ackermann_converter bu flag'e göre karar verir
+"""
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+
+from sensor_msgs.msg import Imu
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
+
+from teknofest_ika.otonomi.topics import (
+    IMU_TOPIC, ODOM_TOPIC, ANTI_ROLLBACK_CMD_TOPIC, ANTI_ROLLBACK_AKTIF_TOPIC,
+    E_STOP_TOPIC, IMU_PITCH_RAMP_THRESHOLD,
+)
+from teknofest_ika.otonomi.pure_logic import quat_to_roll_pitch_deg, rollback_riskli
+
+# topics.py IMU_PITCH_RAMP_THRESHOLD ile uyumlu — önceden burada bağımsız
+# olarak 10.0° hardcode edilmişti, merkezi sabit güncellenirse bu dosya
+# senkronize değildi (DRY ihlali).
+RAMP_PITCH_THRESHOLD_DEG = IMU_PITCH_RAMP_THRESHOLD
+ROLLBACK_VEL_THRESHOLD = 0.05
+RECOVERY_SPEED         = 0.3
+KONTROL_HZ             = 20.0
+
+
+class AntiRollback(Node):
+
+    def __init__(self):
+        super().__init__('anti_rollback')
+
+        self._pitch    = 0.0
+        self._velocity = 0.0
+        self._aktif    = False
+        self._e_stop   = False
+
+        qos_be  = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_rel = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+
+        self.create_subscription(Imu,      IMU_TOPIC,    self._imu_cb,   qos_be)
+        self.create_subscription(Odometry, ODOM_TOPIC,   self._odom_cb,  qos_be)
+        self.create_subscription(Bool,     E_STOP_TOPIC, self._estop_cb, 10)
+
+        # Twist komutu → ackermann_converter override eder (tek yazıcı garantisi)
+        self._cmd_pub   = self.create_publisher(Twist, ANTI_ROLLBACK_CMD_TOPIC,   qos_rel)
+        self._durum_pub = self.create_publisher(Bool,  ANTI_ROLLBACK_AKTIF_TOPIC, 10)
+
+        self.create_timer(1.0 / KONTROL_HZ, self._kontrol)
+        self.get_logger().info(
+            f'AntiRollback hazır | '
+            f'pitch_esik={RAMP_PITCH_THRESHOLD_DEG:.0f}° | '
+            f'vel_esik={ROLLBACK_VEL_THRESHOLD} m/s | '
+            f'recovery={RECOVERY_SPEED} m/s'
+        )
+
+    def _estop_cb(self, msg: Bool):
+        self._e_stop = msg.data
+
+    def _imu_cb(self, msg: Imu):
+        q = msg.orientation
+        _, self._pitch = quat_to_roll_pitch_deg(q.w, q.x, q.y, q.z)
+
+    def _odom_cb(self, msg: Odometry):
+        self._velocity = msg.twist.twist.linear.x
+
+    def _kontrol(self):
+        if self._e_stop:
+            return
+
+        # pure_logic.rollback_riskli — test_birim.py bu fonksiyonu doğrudan
+        # test eder (önceden bu mantık testte ayrı yazılmıştı).
+        rollback = rollback_riskli(
+            self._pitch, self._velocity,
+            RAMP_PITCH_THRESHOLD_DEG, ROLLBACK_VEL_THRESHOLD,
+        )
+
+        if rollback and not self._aktif:
+            self.get_logger().warn(
+                f'[AntiRollback] GERİ KAYMA! '
+                f'pitch={self._pitch:.1f}° '
+                f'vel={self._velocity:.3f} m/s → {RECOVERY_SPEED} m/s override'
+            )
+        elif not rollback and self._aktif:
+            self.get_logger().info('[AntiRollback] Geri kayma sona erdi.')
+
+        self._aktif = rollback
+        self._durum_pub.publish(Bool(data=self._aktif))
+
+        if self._aktif:
+            cmd = Twist()
+            cmd.linear.x  = RECOVERY_SPEED
+            cmd.angular.z = 0.0
+            self._cmd_pub.publish(cmd)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = AntiRollback()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

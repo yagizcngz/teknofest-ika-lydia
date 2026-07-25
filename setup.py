@@ -1,86 +1,73 @@
+from setuptools import find_packages, setup
 import os
 from glob import glob
-from setuptools import setup
 
 package_name = 'teknofest_ika'
 
 setup(
     name=package_name,
-    version='0.0.0',
-    packages=[package_name],
+    version='0.1.0',
+    packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
-            ['resource/teknofest_ika']),
+            ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # Launch
         (os.path.join('share', package_name, 'launch'),
-            glob('launch/*.launch.py')),
-        # URDF
+            glob('launch/*.py')),
+        (os.path.join('share', package_name, 'config'),
+            glob('config/*.yaml')),
         (os.path.join('share', package_name, 'urdf'),
             glob('urdf/*.urdf')),
-        # Meshes
-        (os.path.join('share', package_name, 'meshes'),
-            glob('meshes/*')),
-        # Worlds
-        (os.path.join('share', package_name, 'worlds'),
-            glob('worlds/*.world')),
-        # Maps
         (os.path.join('share', package_name, 'maps'),
-            glob('maps/*')),
-        # yarisma_parkuru modeli
-        (os.path.join('share', package_name, 'models', 'yarisma_parkuru'),
-            glob('models/yarisma_parkuru/*.*')),
-        (os.path.join('share', package_name, 'models', 'yarisma_parkuru', 'materials', 'scripts'),
-            glob('models/yarisma_parkuru/materials/scripts/*')),
-        (os.path.join('share', package_name, 'models', 'yarisma_parkuru', 'materials', 'textures'),
-            glob('models/yarisma_parkuru/materials/textures/*')),
-        # kayar_engel modeli
-        (os.path.join('share', package_name, 'models', 'kayar_engel'),
-            glob('models/kayar_engel/*.*')),
-        # tabela_13 modeli
-        (os.path.join('share', package_name, 'models', 'tabela_13'),
-            glob('models/tabela_13/*.*')),
-        (os.path.join('share', package_name, 'models', 'tabela_13', 'materials', 'scripts'),
-            glob('models/tabela_13/materials/scripts/*')),
-        (os.path.join('share', package_name, 'models', 'tabela_13', 'materials', 'textures'),
-            glob('models/tabela_13/materials/textures/*')),
-        # tabela_5 modeli
-        (os.path.join('share', package_name, 'models', 'tabela_5'),
-            glob('models/tabela_5/*.*')),
-        (os.path.join('share', package_name, 'models', 'tabela_5', 'materials', 'scripts'),
-            glob('models/tabela_5/materials/scripts/*')),
-        (os.path.join('share', package_name, 'models', 'tabela_5', 'materials', 'textures'),
-            glob('models/tabela_5/materials/textures/*')),
-        # dik_engel modeli
-        (os.path.join('share', package_name, 'models', 'dik_engel'),
-            glob('models/dik_engel/*.*')),
-        # engebeli_arazi modeli
-        (os.path.join('share', package_name, 'models', 'engebeli_arazi'),
-            glob('models/engebeli_arazi/*.*')),
-        # kayar_engel_model
-        (os.path.join('share', package_name, 'models', 'kayar_engel_model'),
-            glob('models/kayar_engel_model/*.*')),
-        # materials
-        (os.path.join('share', package_name, 'materials', 'scripts'),
-            glob('materials/scripts/*')),
-        (os.path.join('share', package_name, 'materials', 'textures'),
-            glob('materials/textures/*')),
-        # config/ klasöründeki tüm YAML dosyalarını install'a kopyala
-        # (ekf.yaml, nav2_params.yaml burada)
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+            glob('maps/*') if os.path.exists('maps') else []),
+        (os.path.join('share', package_name, 'meshes'),
+            glob('meshes/*') if os.path.exists('meshes') else []),
+        (os.path.join('share', package_name, 'worlds'),
+            glob('worlds/*') if os.path.exists('worlds') else []),
+        (os.path.join('share', package_name, 'models'),
+            glob('models/**/*.pt', recursive=True) + glob('models/**/*.engine', recursive=True)
+            if os.path.exists('models') else []),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'pyserial',
+        'numpy',
+        'pyyaml',
+    ],
     zip_safe=True,
-    maintainer='bugra16',
-    maintainer_email='ozturkbugra684@gmail.com',
-    description='Teknofest IKA Paketi',
-    license='Apache-2.0',
+    maintainer='Magnesia',
+    description='LYDIA IKA',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'karar_nodu = teknofest_ika.otonomi.karar_nodu:main',
-            'seri_kopru = teknofest_ika.gomulu.seri_kopru:main',
-            'misyon_planlayici = teknofest_ika.otonomi.misyon_planlayici:main',
+            # ── Gömülü ─────────────────────────────────────────────────
+            'seri_kopru           = teknofest_ika.gomulu.seri_kopru:main',
+            'test_arac_koprusu    = teknofest_ika.gomulu.test_arac_koprusu:main',
+            'taret_rc_koprusu     = teknofest_ika.gomulu.taret_rc_koprusu:main',
+            # ── Otonomi ────────────────────────────────────────────────
+            'misyon_fsm           = teknofest_ika.otonomi.misyon_fsm:main',
+            'terrain_adapter      = teknofest_ika.otonomi.terrain_adapter:main',
+            'veri_paketi          = teknofest_ika.otonomi.veri_paketi:main',
+            'ackermann_converter  = teknofest_ika.otonomi.ackermann_converter:main',
+            'anti_rollback        = teknofest_ika.otonomi.anti_rollback:main',
+            'imu_guvenlik         = teknofest_ika.otonomi.imu_guvenlik:main',
+            'mod_yoneticisi       = teknofest_ika.otonomi.mod_yoneticisi:main',
+            'e_stop_node          = teknofest_ika.otonomi.e_stop_node:main',
+            'watchdog             = teknofest_ika.otonomi.watchdog:main',
+            # ── Görsel ─────────────────────────────────────────────────
+            'kayar_engel_kalman   = teknofest_ika.gorsel.kayar_engel_kalman:main',
+            'kayar_engel_costmap  = teknofest_ika.gorsel.kayar_engel_costmap:main',
+            'koni_costmap         = teknofest_ika.gorsel.koni_costmap:main',
+            'preprocessing_node   = teknofest_ika.gorsel.preprocessing_node:main',
+            'yolo_detection_node  = teknofest_ika.gorsel.yolo_detection_node:main',
+            'cone_fusion_node     = teknofest_ika.gorsel.cone_fusion_node:main',
+            'lane_detection_node  = teknofest_ika.gorsel.lane_detection_node:main',
+            'targeting_node       = teknofest_ika.gorsel.targeting_node:main',
+            'servo_controller_node = teknofest_ika.gorsel.servo_controller_node:main',
+            'yolo_adapter_node    = teknofest_ika.gorsel.yolo_adapter_node:main',
+            'scan_relay           = teknofest_ika.gorsel.scan_relay:main',
+            'map_image_node       = teknofest_ika.gorsel.map_image_node:main',
         ],
     },
 )
