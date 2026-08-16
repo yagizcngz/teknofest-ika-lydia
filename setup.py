@@ -20,8 +20,6 @@ setup(
             glob('urdf/*.urdf')),
         (os.path.join('share', package_name, 'maps'),
             glob('maps/*') if os.path.exists('maps') else []),
-        (os.path.join('share', package_name, 'meshes'),
-            glob('meshes/*') if os.path.exists('meshes') else []),
         (os.path.join('share', package_name, 'worlds'),
             glob('worlds/*') if os.path.exists('worlds') else []),
         (os.path.join('share', package_name, 'models'),
@@ -57,7 +55,6 @@ setup(
             # ── Görsel ─────────────────────────────────────────────────
             'kayar_engel_kalman   = teknofest_ika.gorsel.kayar_engel_kalman:main',
             'kayar_engel_costmap  = teknofest_ika.gorsel.kayar_engel_costmap:main',
-            'koni_costmap         = teknofest_ika.gorsel.koni_costmap:main',
             'preprocessing_node   = teknofest_ika.gorsel.preprocessing_node:main',
             'yolo_detection_node  = teknofest_ika.gorsel.yolo_detection_node:main',
             'cone_fusion_node     = teknofest_ika.gorsel.cone_fusion_node:main',
