@@ -75,16 +75,7 @@ def generate_launch_description():
             'range_min':      0.1,
             'frequency':      10.0,
             'invalid_range_is_inf': False,
-        }],
-        remappings=[('/scan', '/scan_raw')]
-    )
-
-    # ── Scan Relay — timestamp ve frame_id düzeltici ──────────────────────────
-    scan_relay = Node(
-        package='teknofest_ika',
-        executable='scan_relay',
-        name='scan_relay',
-        output='screen',
+        }]
     )
 
     # ── OS30A Derinlik Kamerası (eYs3D BMVM0S30A) ────────────────────────────
@@ -241,12 +232,6 @@ def generate_launch_description():
     # repo'da bırakıldı; Node nesnesi burada OLUŞTURULMUYOR (önceden
     # oluşturulup hiç launch edilmeyen, kafa karıştırıcı bir kalıntıydı).
 
-    # Kayar Engel Costmap — Kalman aktifken /scan → Nav2 ObstacleLayer
-    kayar_costmap = Node(
-        package='teknofest_ika', executable='kayar_engel_costmap',
-        name='kayar_engel_costmap', output='screen',
-        parameters=[{'use_sim_time': False}]
-    )
     misyon_fsm = Node(
         package='teknofest_ika', executable='misyon_fsm',
         name='misyon_fsm', output='screen',
@@ -386,20 +371,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': False}]
     )
 
-    # ── YOLO Adapter — Detection2DArray → /ika/detections JSON köprüsü ───────
-    # yolo_detection_node'dan sonra başlamalı (13s+)
-    # img_cx/img_cy: YOLO giriş boyutuna göre (preprocessing_node 640x640 → 320,320)
-    yolo_adapter = Node(
-        package='teknofest_ika', executable='yolo_adapter_node',
-        name='yolo_adapter_node', output='screen',
-        parameters=[{
-            'use_sim_time':   False,
-            'img_cx':         320.0,
-            'img_cy':         320.0,
-            'conf_threshold': 0.75,  # topics.py YOLO_CONFIDENCE_THRESHOLD ile uyumlu
-        }]
-    )
-
     # ── Microcase 720P Webcam'ler — Şartname §6.12: 3 kamera zorunlu ────────────
     #
     # Gerçek udev isimleri Ahmet'in /etc/udev/rules.d/99-ika.rules kuralında
@@ -464,7 +435,7 @@ def generate_launch_description():
     return LaunchDescription([
         rsp,
         TimerAction(period=0.5,  actions=[e_stop]),
-        TimerAction(period=1.0,  actions=[seri_kopru, lidar, scan_relay, os30a,
+        TimerAction(period=1.0,  actions=[seri_kopru, lidar, os30a,
                                           imx258,
                                           webcam_taret, webcam_geri]),
         TimerAction(period=2.0,  actions=[preprocessing]),
@@ -474,11 +445,11 @@ def generate_launch_description():
         TimerAction(period=10.0, actions=[ackermann, imu_guvenlik,
                                           anti_rollback, mod_yoneticisi]),
         TimerAction(period=11.5, actions=[veri_paketi, terrain_adapter,
-                                          kayar_kalman, kayar_costmap,
+                                          kayar_kalman,
                                           taret_rc_koprusu]),
         TimerAction(period=12.0, actions=[watchdog]),
         TimerAction(period=13.0, actions=[yolo_detection, cone_fusion,
                                           targeting, servo_controller]),
-        TimerAction(period=13.5, actions=[yolo_adapter]),
+
         TimerAction(period=16.0, actions=[misyon_fsm]),
     ])

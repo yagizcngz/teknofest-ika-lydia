@@ -64,6 +64,7 @@ from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 
 from std_msgs.msg import Bool, String, UInt8
+from vision_msgs.msg import Detection2DArray
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 from nav2_msgs.action import NavigateToPose
@@ -71,7 +72,7 @@ from nav2_msgs.action import NavigateToPose
 import smach
 
 from teknofest_ika.otonomi.topics import (
-    FSM_STATE_TOPIC, DETECTIONS_TOPIC,
+    FSM_STATE_TOPIC, DETECTIONS_TOPIC, YOLO_RAW_TOPIC, YOLO_CLASS_ID_TOPIC, YOLO_CONFIDENCE_THRESHOLD,
     MOVING_OBS_DIR_TOPIC, E_STOP_TOPIC, MOD_AKTIF_TOPIC,
     MISSION_START_TOPIC, MISYON_AKTIF_TOPIC,
     TARGETING_ENABLE_TOPIC, TARGETING_STATUS_TOPIC,
@@ -80,11 +81,26 @@ from teknofest_ika.otonomi.topics import (
     CMD_VEL_TOPIC, ODOM_TOPIC, RAMP_STOP_DURATION,
 )
 from teknofest_ika.otonomi.pure_logic import (
-    DetectionsStore, stop_check as _stop_check_pure, hizlanma_hiz_profili,
+    DetectionsStore, stop_check as _stop_check_pure, hizlanma_hiz_profili, ConsecutiveFrameFilter
 )
 
 # §6.10: dik eğim çıkış/iniş noktalarında STOP tabelası kaçırılsa bile
 # zorunlu 2s bekleme uygulanması gereken waypoint etiketleri.
+TABELA_SINIF = {
+    0:  "SULU_YOL", 1:  "DIK_EGIM_CIKIS", 4:  "TASLI_YOL",
+    5:  "YAN_EGIM", 6:  "DIK_ENGEL", 7:  "KONİLİ_YOL",
+    8:  "KAYAR_ENGEL", 9:  "ENGEBELİ_ARAZİ", 10: "DIK_EGIM",
+    11: "ATIS_BOLGESI",
+}
+CLASS_TABELA_11 = 2
+CLASS_TABELA_11_SON = 3
+CLASS_TABELA_STOP = 12
+CLASS_HEDEF_TAHTASI = 13
+CLASS_TRAFIK_HUNI = 14
+NO_DETECTION = 255
+STOP_CONSECUTIVE_FRAMES = 2
+TABELA_CONSECUTIVE_FRAMES = 2
+
 DIK_EGIM_ETIKETLERI = ('DIK_EGIM_GIRIS', 'DIK_EGIM_CIKIS', 'DIK_EGIM')
 
 
@@ -883,14 +899,69 @@ def main():
     # node üzerinden state'lerin erişmesi için referans
     node._fsm_state_pub = fsm_state_pub
 
-    def _on_detections(msg: String):
-        try:
-            data = json.loads(msg.data)
-            det_store.update(data)
-        except (json.JSONDecodeError, ValueError):
-            pass
+    class_id_pub = node.create_publisher(UInt8, YOLO_CLASS_ID_TOPIC, 10)
+    stop_filter = ConsecutiveFrameFilter(STOP_CONSECUTIVE_FRAMES, bos_deger=False, sticky=False)
+    tabela_filter = ConsecutiveFrameFilter(TABELA_CONSECUTIVE_FRAMES, bos_deger=NO_DETECTION, sticky=True)
 
-    node.create_subscription(String, DETECTIONS_TOPIC, _on_detections, 10)
+    def _on_detections(msg: Detection2DArray):
+        tabela_id = NO_DETECTION
+        hedef_var = False
+        hedef_hata_x = 0.0
+        hedef_hata_y = 0.0
+        koni_var = False
+        hizlanma_bitti = False
+        stop_goruldu = False
+        best_tabela_conf = 0.0
+        best_hedef_conf = 0.0
+
+        # Parameters from node
+        img_cx = 320.0
+        img_cy = 320.0
+        conf_threshold = YOLO_CONFIDENCE_THRESHOLD
+
+        for det in msg.detections:
+            if not det.results:
+                continue
+            hyp = det.results[0]
+            cid = int(hyp.hypothesis.class_id)
+            conf = float(hyp.hypothesis.score)
+
+            if conf < conf_threshold:
+                continue
+
+            if cid in TABELA_SINIF:
+                if conf > best_tabela_conf:
+                    best_tabela_conf = conf
+                    tabela_id = cid
+            elif cid == CLASS_HEDEF_TAHTASI:
+                if conf > best_hedef_conf:
+                    best_hedef_conf = conf
+                    hedef_var = True
+                    hedef_hata_x = det.bbox.center.x - img_cx
+                    hedef_hata_y = det.bbox.center.y - img_cy
+            elif cid == CLASS_TRAFIK_HUNI:
+                koni_var = True
+            elif cid == CLASS_TABELA_11_SON:
+                hizlanma_bitti = True
+            elif cid == CLASS_TABELA_STOP:
+                stop_goruldu = True
+
+        stop_var = stop_filter.isle(stop_goruldu)
+        tabela_confirmed = tabela_filter.isle(tabela_id)
+
+        payload = {
+            "tabela": tabela_confirmed,
+            "hedef_var": hedef_var,
+            "hedef_hata_x": hedef_hata_x,
+            "hedef_hata_y": hedef_hata_y,
+            "koni_var": koni_var,
+            "hizlanma_bitti": hizlanma_bitti,
+            "stop_var": stop_var,
+        }
+        det_store.update(payload)
+        class_id_pub.publish(UInt8(data=tabela_confirmed))
+
+    node.create_subscription(Detection2DArray, YOLO_RAW_TOPIC, _on_detections, 10)
 
     def _on_obs_direction(msg: String):
         det_store.update_field('kayar_yon', msg.data)
