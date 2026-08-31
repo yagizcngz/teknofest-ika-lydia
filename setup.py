@@ -16,6 +16,11 @@ setup(
             glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'),
             glob('config/*.yaml')),
+        # Davranış ağaçları: bt_navigator bunları nav2_params.yaml'daki TAM
+        # YOLDAN okuyor (kaynak ağacından), buradaki kopya launch yoluyla
+        # kurulum yapan kurulumlar için.
+        (os.path.join('share', package_name, 'config', 'bt'),
+            glob('config/bt/*.xml')),
         (os.path.join('share', package_name, 'urdf'),
             glob('urdf/*.urdf')),
         (os.path.join('share', package_name, 'maps'),
