@@ -125,7 +125,7 @@ def _v1_oku(ham: bytes) -> int:
 #                    gönderirse dahi binary pakete bu değerin üstü yazılamaz.
 TEKERLEK_ARALIGI  = 0.900   # [m] — arka aks iz genişliği (EK-7 B)
 TEKERLEK_YARICI   = 0.200   # [m] — havalı arazi lastiği (EK-7 A, C)
-TICKS_PER_REV     = 1024    # AS5600 10-bit (sabit, değiştirme)
+TICKS_PER_REV     = 2400    # YENI DONANIM: E6B2-CWZ6C 600 PPR (X4 modunda 2400 okur)
 MAX_DIREKSIYON    = 30.0    # [derece] — donanım güvenlik limiti
 MAX_HIZ_MS        = 3.0     # [m/s] — donanım güvenlik limiti (VESC sınırı)
 
@@ -211,12 +211,12 @@ class SeriKopru(Node):
         self._imu_pub  = self.create_publisher(Imu, IMU_TOPIC, qos_odom)
         self._tf       = TransformBroadcaster(self)
 
-        # Batarya durumu yayıncısı — INA219 → PKT_AKIM → /battery/status
-        # 8S LiPo: 33.6V tam, 28.0V boş (4.2V / 3.5V per hücre)
+        # Batarya durumu yayıncısı - INA219 → PKT_AKIM → /battery/status
+        # YENI DONANIM: 4S LiPo: 16.8V tam, 14.0V boş (4.2V / 3.5V per hücre)
         self._battery_pub = self.create_publisher(BatteryState, BATTERY_TOPIC, 10)
-        self._BATARYA_V_MAX = 33.6
-        self._BATARYA_V_MIN = 28.0
-        self._BATARYA_UYARI = 29.6   # 3.7V/hücre × 8 → nominal = uyarı eşiği
+        self._BATARYA_V_MAX = 16.8
+        self._BATARYA_V_MIN = 14.0
+        self._BATARYA_UYARI = 14.8   # 3.7V/hucre x 4 nominal = uyari esigi
 
         # RC kanal yayıncısı — mod_yoneticisi + taret_rc_koprusu dinler
         # Format: [ch1_throttle_us, ch2_steering_us, ch5_mode_us, ch3_aux_us,
@@ -468,8 +468,12 @@ class SeriKopru(Node):
                 self._prev_enc_time = now_sec
                 return
 
-            d_sol = _delta(sol, self._prev_sol, TICKS_PER_REV)
-            d_sag = _delta(sag, self._prev_sag, TICKS_PER_REV)
+            # YENI DONANIM (Incremental Encoder) ICIN DUZELTME:
+            # Incremental enkoderler her turda degil, degiskenin sinirinda (uint16_t -> 65536) tasar.
+            # Eger eski AS5600 (mutlak) encoder kullaniliyorsa burasi TICKS_PER_REV olmalidir.
+            # Eger yeni E6B2-CWZ6C incremental encoder takildiysa burasi 65536 olmalidir.
+            d_sol = _delta(sol, self._prev_sol, 65536)
+            d_sag = _delta(sag, self._prev_sag, 65536)
             self._prev_sol, self._prev_sag = sol, sag
 
             dt = now_sec - self._prev_enc_time

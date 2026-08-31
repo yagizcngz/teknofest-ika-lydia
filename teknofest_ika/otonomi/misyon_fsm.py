@@ -828,12 +828,31 @@ class ErrorRecoveryState(smach.State):
             self._retry_count = 0
             return 'abort'
 
-        # Önceki waypointten tekrar dene
-        if userdata.wp_index > 0:
-            userdata.wp_index -= 1
+        # HATA DUZELTILDI: Clear Costmap cagriliyor
+        self._clear_costmaps()
+
 
         time.sleep(2.0)
         return 'recovered'
+
+    def _clear_costmaps(self):
+        "\"\"Nav2 costmaplerini temizler (Hayalet engelleri siler).\"\"\"
+        from nav2_msgs.srv import ClearEntireCostmap
+        self.node.get_logger().info('[ERROR_RECOVERY] Nav2 Costmap temizleniyor...')
+        
+        services = [
+            '/local_costmap/clear_entirely_local_costmap',
+            '/global_costmap/clear_entirely_global_costmap'
+        ]
+        
+        for srv_name in services:
+            client = self.node.create_client(ClearEntireCostmap, srv_name)
+            if client.wait_for_service(timeout_sec=1.0):
+                req = ClearEntireCostmap.Request()
+                client.call_async(req)
+                self.node.get_logger().info(f'[ERROR_RECOVERY] {srv_name} tetiklendi.')
+            else:
+                self.node.get_logger().warn(f'[ERROR_RECOVERY] Servis bulunamadi: {srv_name}')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

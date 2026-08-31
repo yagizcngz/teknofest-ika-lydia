@@ -78,26 +78,13 @@ def generate_launch_description():
         }]
     )
 
-    # ── OS30A Derinlik Kamerası (eYs3D BMVM0S30A) ────────────────────────────
-    # Sürücü: eYs3D HD-DM-ROS2-SDK  →  package: dm_preview
-    # Yayınlanan topic: /apc/points/data_raw (PointCloud2)
-    # Kurulum: terminalden aşağıdaki adımları izle (bir kez yapılır):
-    #   git clone https://github.com/eYs3D/HD-DM-ROS2-SDK-Release.git ~/eys3d_ws/src/dm_preview
-    #   cd ~/eys3d_ws && rosdep install -i --from-path src -y
-    #   colcon build --symlink-install
-    #   echo "source ~/eys3d_ws/install/setup.bash" >> ~/.bashrc
-    #
-    # DEĞİŞİKLİK (2026-07-15, sahada doğrulandı): dm_preview paketinin
-    # eys3d_ws derlemesi eksik/bozuk (vendor .so dosyası ve stereo_msgs
-    # bağımlılığı eksik, "package 'dm_preview' not found" ile TÜM launch'ı
-    # çökertiyordu). Aynı donanım için ÇALIŞAN bir alternatif paket var:
-    # ydlidar_os30a (dev_ws'te ayrı kurulu). Elle kısaltılmış parametrelerle
-    # değil, resmi launch dosyasıyla başlatılmalı — aksi halde derinlik
-    # akışı hiç üretilmiyor (2026-07-10 oturumunda bulunan bilinen sorun).
-    os30a = IncludeLaunchDescription(
+    # ── Orbbec Gemini 335L Derinlik Kamerası ─────────────────────────────────
+    # Sürücü: orbbec_camera
+    # Yayınlanan topic: /camera/depth/color/points (PointCloud2)
+    orbbec_camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ydlidar_os30a'),
-                         'launch', 'apc_camera_launch.py')
+            os.path.join(get_package_share_directory('orbbec_camera'),
+                         'launch', 'gemini335.launch.py')
         )
     )
 
@@ -276,14 +263,14 @@ def generate_launch_description():
     # /camera/front/image_raw ve /camera/taret/image_raw'a abone olur — remap
     # gerekmez (önceki remap-bağımlı tasarım, nişan kamerasının hiç remap
     # edilmemesi nedeniyle hiç işlenmemesine yol açmıştı).
-    # /depth/points → OS30A derinlik kamerasından (/apc/points/data_raw)
-    # /scan_lidar → preprocessing_node.py SCAN_LIDAR_TOPIC ile direkt abone, remap gerekmez
+    # /depth/points ← Orbbec derinlik kamerasından (/camera/depth/color/points)
+    # /scan_lidar ← preprocessing_node.py SCAN_LIDAR_TOPIC ile direkt abone, remap gerekmez
     preprocessing = Node(
         package='teknofest_ika', executable='preprocessing_node',
         name='preprocessing_node', output='screen',
         parameters=[{'use_sim_time': False}],
         remappings=[
-            ('/depth/points', '/apc/points/data_raw'),
+            ('/depth/points', '/camera/depth/color/points'),
         ]
     )
 
@@ -435,7 +422,7 @@ def generate_launch_description():
     return LaunchDescription([
         rsp,
         TimerAction(period=0.5,  actions=[e_stop]),
-        TimerAction(period=1.0,  actions=[seri_kopru, lidar, os30a,
+        TimerAction(period=1.0,  actions=[seri_kopru, lidar, orbbec_camera,
                                           imx258,
                                           webcam_taret, webcam_geri]),
         TimerAction(period=2.0,  actions=[preprocessing]),

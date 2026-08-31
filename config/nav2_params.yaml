@@ -237,7 +237,7 @@ global_costmap:
         # koni_costmap.py'dir ve /cone_positions'a hiçbir node yayın yapmıyor
         # — kaynak hep boş kalıyordu. Gerçek koni engeli yolo_cone_cloud
         # (cone_fusion_node, LiDAR+YOLO füzyonu) üzerinden geliyor.
-        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud orbbec_cloud
         scan:
           topic: /scan/filtered
           max_obstacle_height: 2.0
@@ -269,8 +269,9 @@ global_costmap:
           obstacle_max_range: 4.0
           obstacle_min_range: 0.0
           observation_persistence: 0.5
-        os30a_cloud:
-          topic: /apc/points/data_raw
+        # Orbbec Gemini 335L Derinlik Kamerasi
+        orbbec_cloud:
+          topic: /depth/points/filtered
           min_obstacle_height: 0.05
           max_obstacle_height: 1.50
           clearing: true
@@ -309,7 +310,7 @@ local_costmap:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         # koni_cloud çıkarıldı — bkz. global_costmap'teki açıklama (üreticisi yok).
-        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud orbbec_cloud
         scan:
           topic: /scan/filtered
           max_obstacle_height: 2.0
@@ -341,8 +342,9 @@ local_costmap:
           obstacle_max_range: 4.0
           obstacle_min_range: 0.0
           observation_persistence: 0.5
-        os30a_cloud:
-          topic: /apc/points/data_raw
+        # Orbbec Gemini 335L Derinlik Kamerasi
+        orbbec_cloud:
+          topic: /depth/points/filtered
           min_obstacle_height: 0.05
           max_obstacle_height: 1.50
           clearing: true
