@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 seri_kopru.py  —  MCU ↔ Jetson Binary Seri Köprü Node'u
 =========================================================
@@ -324,39 +324,32 @@ class SeriKopru(Node):
 
     # ── Seri okuma — binary state machine (thread) ──────────────────────────
     def _okuma_dongusu(self):
-        """
+        "\"\"
         MCU'dan gelen 8-byte binary paketleri senkronize eder.
-        Strateji: 0xAA başlangıç byte'ını bekle, sonra 7 byte daha oku.
-        Bu yaklaşım kablo gürültüsüne karşı dayanıklıdır.
-        """
-        while self._calisıyor:
+        STM32 (Native USB) icin Buffer-Sliding Window stratejisi kullanilir.
+        "\"\"
+        buffer = bytearray()
+        
+        while self._calisiyor:
             try:
-                # Başlangıç byte'ını bekle
-                byte = self._ser.read(1)
-                if not byte or byte[0] != PKT_BASLA:
-                    continue
-
-                # Geri kalan 7 byte'ı oku
-                kalan = self._ser.read(PKT_BOYUT - 1)
-                if len(kalan) != PKT_BOYUT - 1:
-                    continue
-
-                ham = bytes([PKT_BASLA]) + kalan
-
-                if not _paket_dogrula(ham):
-                    self.get_logger().warn(
-                        f'CRC hatası: {ham.hex()}',
-                        throttle_duration_sec=5.0
-                    )
-                    continue
-
-                if not self._link_hazir:
-                    self._link_hazir = True
-                    self.get_logger().info(
-                        'Mega bağlantısı doğrulandı — gönderim aktif.')
-
-                self._paket_isle(ham)
-
+                waiting = max(1, self._ser.in_waiting)
+                chunk = self._ser.read(waiting)
+                if chunk:
+                    buffer.extend(chunk)
+                    
+                while len(buffer) >= PKT_BOYUT:
+                    if buffer[0] == PKT_BASLA:
+                        ham_paket = buffer[:PKT_BOYUT]
+                        
+                        if not _paket_dogrula(ham_paket):
+                            self.get_logger().warn(f'CRC hatasi: {ham_paket.hex()}', throttle_duration_sec=5.0)
+                        else:
+                            self._paket_isle(ham_paket)
+                            
+                        buffer = buffer[PKT_BOYUT:]
+                    else:
+                        del buffer[0]
+                        
             except (serial.SerialException, OSError) as e:
                 self.get_logger().error(str(e), throttle_duration_sec=5.0)
                 time.sleep(0.2)
