@@ -342,11 +342,13 @@ class SeriKopru(Node):
                         ham_paket = buffer[:PKT_BOYUT]
                         
                         if not _paket_dogrula(ham_paket):
-                            self.get_logger().warn(f'CRC hatasi: {ham_paket.hex()}', throttle_duration_sec=5.0)
+                            self.get_logger().warn(f'CRC/Frame hatasi (Kaydiriliyor): {ham_paket.hex()}', throttle_duration_sec=5.0)
+                            # HATA DURUMU: 8 bayti degil, sadece 1 bayti silerek pencereyi yavasca kaydir!
+                            del buffer[0]
                         else:
                             self._paket_isle(ham_paket)
-                            
-                        buffer = buffer[PKT_BOYUT:]
+                            # BASARILI DURUM: Paket islendi, havuzdan o 8 bayti temizle.
+                            buffer = buffer[PKT_BOYUT:]
                     else:
                         del buffer[0]
                         
