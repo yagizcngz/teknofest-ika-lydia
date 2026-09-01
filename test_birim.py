@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Kritik fonksiyon birim testleri — donanım VE ROS2/rclpy gerektirmez.
 
@@ -357,4 +357,5 @@ check("yumuşatma: dt=0 → değişmez",             fren_yumusat(0.4, 1.0, 0.5,
 print(f"\n{'='*45}")
 print(f"  TOPLAM: {PASS+FAIL} test | {PASS} GEÇTI | {FAIL} BAŞARISIZ")
 print(f"{'='*45}")
-sys.exit(0 if FAIL == 0 else 1)
+if __name__ == '__main__':
+    sys.exit(0 if FAIL == 0 else 1)
