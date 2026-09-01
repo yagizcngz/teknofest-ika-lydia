@@ -231,6 +231,9 @@ class AckermannConverter(Node):
         with self._override_lock:
             if self._override_active:
                 twist = self._override_twist
+                # Override aninda hiz sifirsa, anti-rollback %100 fren basmak istiyordur.
+                if twist.linear.x == 0.0:
+                    self._fren_orani = 1.0
 
         self._last_cmd_time = self.get_clock().now()
 
