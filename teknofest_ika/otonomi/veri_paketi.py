@@ -27,6 +27,8 @@ NOT: Kamera topic adları araçtaki gerçek topic'lere göre
 import os
 import time
 import threading
+import queue
+import cv2
 from datetime import datetime
 from pathlib import Path
 
@@ -60,7 +62,7 @@ HEDEF_YUKSEKLIK = 480                                # Çıkış yüksekliği (p
 # ─── Kamera Kaydedici Yardımcı Sınıf ───────────────────────────────────────
 
 class KameraKaydedici:
-    """Tek bir kamera topic'ini MP4 dosyasına kaydeder."""
+    """Tek bir kamera topic'ini asenkron (Threaded) olarak MP4 dosyasina kaydeder."""
 
     def __init__(self, ad: str):
         self.ad   = ad
@@ -69,6 +71,9 @@ class KameraKaydedici:
         self.kare_say = 0
         self.baslama  = None
         self._aktif   = False
+        
+        self.kuyruk = None
+        self._thread = None
 
     def baslat(self, kayit_yolu: str):
         with self._lock:
@@ -84,20 +89,54 @@ class KameraKaydedici:
             self.kare_say = 0
             self.baslama  = time.time()
             self._aktif   = True
+            
+            self.kuyruk = queue.Queue(maxsize=30)
+            self._thread = threading.Thread(target=self._kayit_dongusu, daemon=True)
+            self._thread.start()
 
     def durdur(self):
         with self._lock:
-            if self._writer and self._aktif:
+            self._aktif = False
+            if self.kuyruk is not None:
+                try:
+                    self.kuyruk.put_nowait(None)
+                except queue.Full:
+                    pass
+
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+            self._thread = None
+            self.kuyruk = None
+
+        with self._lock:
+            if self._writer:
                 self._writer.release()
                 self._writer = None
-            self._aktif = False
 
     def kare_yaz(self, frame_bgr):
-        with self._lock:
-            if self._aktif and self._writer:
-                resized = cv2.resize(frame_bgr, (HEDEF_GENISLIK, HEDEF_YUKSEKLIK))
-                self._writer.write(resized)
-                self.kare_say += 1
+        if not self._aktif or self.kuyruk is None:
+            return
+            
+        try:
+            self.kuyruk.put_nowait(frame_bgr)
+        except queue.Full:
+            pass
+
+    def _kayit_dongusu(self):
+        while True:
+            frame = self.kuyruk.get()
+            
+            if frame is None:
+                break
+                
+            if not self._aktif:
+                break
+                
+            resized = cv2.resize(frame, (HEDEF_GENISLIK, HEDEF_YUKSEKLIK))
+            with self._lock:
+                if self._writer:
+                    self._writer.write(resized)
+                    self.kare_say += 1
 
     @property
     def aktif(self):
