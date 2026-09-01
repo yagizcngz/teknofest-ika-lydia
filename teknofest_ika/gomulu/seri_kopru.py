@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 seri_kopru.py  —  MCU ↔ Jetson Binary Seri Köprü Node'u
 =========================================================
@@ -343,11 +343,9 @@ class SeriKopru(Node):
                         
                         if not _paket_dogrula(ham_paket):
                             self.get_logger().warn(f'CRC/Frame hatasi (Kaydiriliyor): {ham_paket.hex()}', throttle_duration_sec=5.0)
-                            # HATA DURUMU: 8 bayti degil, sadece 1 bayti silerek pencereyi yavasca kaydir!
                             del buffer[0]
                         else:
                             self._paket_isle(ham_paket)
-                            # BASARILI DURUM: Paket islendi, havuzdan o 8 bayti temizle.
                             buffer = buffer[PKT_BOYUT:]
                     else:
                         del buffer[0]
