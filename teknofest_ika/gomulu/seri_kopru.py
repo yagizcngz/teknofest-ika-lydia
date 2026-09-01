@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 seri_kopru.py  —  MCU ↔ Jetson Binary Seri Köprü Node'u
 =========================================================
@@ -324,10 +324,10 @@ class SeriKopru(Node):
 
     # ── Seri okuma — binary state machine (thread) ──────────────────────────
     def _okuma_dongusu(self):
-        "\"\"
+        """
         MCU'dan gelen 8-byte binary paketleri senkronize eder.
         STM32 (Native USB) icin Buffer-Sliding Window stratejisi kullanilir.
-        "\"\"
+        """
         buffer = bytearray()
         
         while self._calisiyor:

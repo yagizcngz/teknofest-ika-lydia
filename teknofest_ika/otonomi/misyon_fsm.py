@@ -836,7 +836,7 @@ class ErrorRecoveryState(smach.State):
         return 'recovered'
 
     def _clear_costmaps(self):
-        "\"\"Nav2 costmaplerini temizler (Hayalet engelleri siler).\"\"\"
+        """Nav2 costmaplerini temizler (Hayalet engelleri siler)."""
         from nav2_msgs.srv import ClearEntireCostmap
         self.node.get_logger().info('[ERROR_RECOVERY] Nav2 Costmap temizleniyor...')
         
