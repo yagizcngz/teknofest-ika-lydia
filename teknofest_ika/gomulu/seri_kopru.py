@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 seri_kopru.py  —  MCU ↔ Jetson Binary Seri Köprü Node'u
 =========================================================
