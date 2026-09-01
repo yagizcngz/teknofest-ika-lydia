@@ -1,4 +1,4 @@
-version: "3.8"
+﻿version: "3.8"
 
 # NOT: Bu proje artik Gazebo simulasyonu icermiyor (bkz. git log: "simulasyon
 # dosyalari kaldirildi") — container ismi/DISPLAY X11 yonlendirmesi RViz2
@@ -16,6 +16,8 @@ services:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
       - IKA_WS=/root/ika_ws
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/root/ika_ws/src/teknofest_ika/config/fastdds_unicast.xml
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - .:/root/ika_ws/src/teknofest_ika:rw
@@ -33,3 +35,4 @@ services:
         echo '  ros2 launch teknofest_ika test_arac.launch.py       # test araci' &&
         /bin/bash
       "
+
