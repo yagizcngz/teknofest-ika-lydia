@@ -132,11 +132,14 @@ class KameraKaydedici:
             if not self._aktif:
                 break
                 
-            resized = cv2.resize(frame, (HEDEF_GENISLIK, HEDEF_YUKSEKLIK))
-            with self._lock:
-                if self._writer:
-                    self._writer.write(resized)
-                    self.kare_say += 1
+            try:
+                resized = cv2.resize(frame, (HEDEF_GENISLIK, HEDEF_YUKSEKLIK))
+                with self._lock:
+                    if self._writer:
+                        self._writer.write(resized)
+                        self.kare_say += 1
+            except Exception as e:
+                print(f"[FATAL ERROR] Kamera '{self.ad}' kare isleme hatasi (atlanildi): {e}")
 
     @property
     def aktif(self):
