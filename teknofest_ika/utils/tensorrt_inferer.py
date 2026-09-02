@@ -6,14 +6,12 @@ Requires: tensorrt, pycuda, numpy, cv2
 
 import os
 import time
-import ctypes
 import numpy as np
 import cv2
 
 try:
     import tensorrt as trt
     import pycuda.driver as cuda
-    import pycuda.autoinit
     HAS_TRT = True
 except ImportError as e:
     print(f"[TensorRTInferer] WARNING: TensorRT/PyCUDA not available: {e}")

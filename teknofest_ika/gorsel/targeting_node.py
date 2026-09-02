@@ -4,7 +4,6 @@ targeting_node.py — Autonomous Shooting: HSV + Hough Circle + PID
 Publishes targeting error, status, and turret commands.
 """
 
-import time
 import numpy as np
 import cv2
 
@@ -28,7 +27,6 @@ from teknofest_ika.otonomi.topics import (
 from teknofest_ika.otonomi.mod_yoneticisi import MOD_MANUAL
 
 try:
-    from teknofest_ika.utils.tensorrt_inferer import TensorRTInferer
     HAS_TRT = True
 except Exception:
     HAS_TRT = False
@@ -231,7 +229,6 @@ class TargetingNode(Node):
             if os.path.exists(aday):
                 yol = aday
         # `yolo export` ile üretilen .engine ULTRALYTICS formatındadır (başında
-        # metadata var); ham TensorRTInferer onu yükleyemez, ultralytics YOLO
         # kendi engine'ini yükleyip TensorRT arka planıyla koşturur (~38 FPS).
         # .engine yoksa aynı arayüzle .pt'ye düşer (yavaş ama çalışır).
         if not HAS_ULTRALYTICS:

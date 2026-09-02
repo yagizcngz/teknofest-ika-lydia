@@ -15,7 +15,6 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 import time
-import math
 
 from sensor_msgs.msg import Imu
 from geometry_msgs.msg import Twist
@@ -62,6 +61,7 @@ class AntiRollback(Node):
         self._state_start_time = 0.0
         self._last_ramp_time = 0.0
         self._hill_crest_time = 0.0
+        self._last_cmd_time = 0.0
         
         self._boost = 0.0
         
@@ -89,6 +89,7 @@ class AntiRollback(Node):
 
     def _cmd_cb(self, msg: Twist):
         self._yolo_cmd = msg
+        self._last_cmd_time = time.time()
 
     def _estop_cb(self, msg: Bool):
         self._e_stop = msg.data
@@ -101,8 +102,13 @@ class AntiRollback(Node):
 
         now = time.time()
 
+        # 0. Bayat Komut (Watchdog) Korumasi
+        # Eger son hiz komutunun uzerinden 0.5s gectiyse (Nav2 coktu veya durdu),
+        # kasten geri gitme ihtimalini sifirla ve sistemi korumaya al (yolo_linear = 0).
+        cmd_stale = (self._last_cmd_time == 0.0 or (now - self._last_cmd_time) > 0.5)
+        yolo_linear = 0.0 if cmd_stale else self._yolo_cmd.linear.x
+
         # 1. Niyet ve Fiziksel Kayma Algilamasi (Simetrik Yokus Korumasi)
-        yolo_linear = self._yolo_cmd.linear.x
         
         # Yokus Yukari Geri Kayma (YOLO ileri veya durmak istiyor ama ivme geri)
         is_slipping_back = (self._pitch > RAMP_PITCH_THRESHOLD_DEG and 

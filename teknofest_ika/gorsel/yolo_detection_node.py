@@ -5,7 +5,6 @@ Publishes vision_msgs/Detection2DArray
 """
 
 import os
-import numpy as np
 import cv2
 
 import rclpy
@@ -14,7 +13,6 @@ from rclpy.qos import qos_profile_sensor_data
 
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose, Pose2D, Point2D
-from std_msgs.msg import Header
 
 from cv_bridge import CvBridge
 from teknofest_ika.utils.tensorrt_inferer import TensorRTInferer, HAS_TRT
