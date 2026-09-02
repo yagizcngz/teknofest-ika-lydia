@@ -48,7 +48,7 @@ setup(
             'seri_kopru           = teknofest_ika.gomulu.seri_kopru:main',
             'taret_rc_koprusu     = teknofest_ika.gomulu.taret_rc_koprusu:main',
             # ── Otonomi ────────────────────────────────────────────────
-            'misyon_fsm           = teknofest_ika.otonomi.misyon_fsm:main',
+            'misyon_fsm           = teknofest_ika.otonomi.fsm.misyon_fsm_node:main',
             'terrain_adapter      = teknofest_ika.otonomi.terrain_adapter:main',
             'veri_paketi          = teknofest_ika.otonomi.veri_paketi:main',
             'ackermann_converter  = teknofest_ika.otonomi.ackermann_converter:main',
