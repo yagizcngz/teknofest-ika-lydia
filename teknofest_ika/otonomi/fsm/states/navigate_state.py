@@ -1,3 +1,6 @@
+from teknofest_ika.otonomi.fsm.helpers.nav2_client import Nav2Client
+from teknofest_ika.otonomi.fsm.helpers.misyon_saati import MisyonSaati
+from teknofest_ika.otonomi.fsm.helpers.kayan_hedef_surucusu import KayanHedefSurucusu
 #!/usr/bin/env python3
 """
 misyon_fsm.py — LYDİA İKA Görev Yöneticisi (SMACH FSM)
@@ -77,50 +80,21 @@ TEST (kamerasız):
     --rate 10
 """
 
-import json
-import math
 import time
-import threading
-import yaml
 
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
-from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-from std_msgs.msg import Bool, Float32, String, UInt8
-from geometry_msgs.msg import PoseStamped, Twist
-from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan, Imu
-from nav2_msgs.action import NavigateToPose
+from std_msgs.msg import String, UInt8
 
 import smach
 
 from teknofest_ika.otonomi.topics import (
-    FSM_STATE_TOPIC, DETECTIONS_TOPIC,
-    MOVING_OBS_DIR_TOPIC, E_STOP_TOPIC, MOD_AKTIF_TOPIC,
-    MISSION_START_TOPIC, MISYON_AKTIF_TOPIC,
-    TARGETING_ENABLE_TOPIC, TARGETING_STATUS_TOPIC,
-    SHOOT_CMD_TOPIC, SHOOT_RESULT_TOPIC, LASER_FIRE_DURATION,
-    MISSION_STATUS_TOPIC, MISYON_WP_INDEX_TOPIC,
-    CMD_VEL_TOPIC, ODOM_TOPIC, EKF_ODOM_TOPIC, RAMP_STOP_DURATION,
-    MISYON_KALAN_SURE_TOPIC, KOSU_SURESI_S, PAS_HAKKI, PAS_GECILEMEZ,
-    SCAN_FILTERED_TOPIC, ENGEBELI_SAPMA_TOPIC, KORIDOR_GENISLIGI_M,
-    IMU_TOPIC, IMU_PITCH_RAMP_THRESHOLD,
-    KORIDOR_SAPMA_UYARI_M, KORIDOR_TOPLAM_TOLERANS, KORIDOR_PENCERE_RAD,
-    KAYAN_HEDEF_PERIYOT_S, KAYAN_HEDEF_FRAME, KAYAN_HEDEF_YOK_SINIR,
-    KAYAN_ODOM_BAYATLAMA_S, LIDAR_MONTAJ_YAW_RAD,
+    MISYON_WP_INDEX_TOPIC, RAMP_STOP_DURATION,
+    PAS_HAKKI, PAS_GECILEMEZ,
 )
 from teknofest_ika.otonomi.pure_logic import (
-    DetectionsStore, stop_check as _stop_check_pure, hizlanma_hiz_profili,
-    durma_degerlendir, tarama_yan_mesafe, koridor_sapmasi, aci_sarmala,
-    kosu_butcesi, pas_verilebilir as _pas_verilebilir_pure,
-    kurtarma_karari as _kurtarma_karari_pure,
-    quat_to_roll_pitch_deg, rollback_riskli, rampa_faz_gecisi,
-    koridor_merkez_cizgisi, kayan_hedef, ic_duvar_hedefi,
-    hedefleme_modu_sec, kayan_hedef_karari,
-    quat_yaw, arac_hedefini_odoma_tasi,
+    DetectionsStore, stop_check as _stop_check_pure, pas_verilebilir as _pas_verilebilir_pure,
 )
 
 # §6.10: dik eğim çıkış/iniş noktalarında STOP tabelası kaçırılsa bile
