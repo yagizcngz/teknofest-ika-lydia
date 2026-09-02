@@ -68,7 +68,7 @@ TF / TOPIC MİMARİSİ
 ─────────────────────────────────────────────────────────────────────────────
 PARAMETRELER (ros2 param set ile çalışma zamanında değiştirilebilir)
 ─────────────────────────────────────────────────────────────────────────────
-    wheelbase          : Dingil arası [m]     — PLACEHOLDER: araç ölçülünce güncelle
+    wheelbase          : Dingil arası [m]     — 1.40 (2026-07-27 ölçüldü)
     max_steering_angle : Max direksiyon açısı [rad] — yaklaşık 30° = 0.5236 rad
     max_speed          : VESC hız sınırı [m/s]
     cmd_vel_timeout    : Bu süre içinde /cmd_vel gelmezse araç durdurulur [s]
@@ -95,10 +95,10 @@ from teknofest_ika.otonomi.topics import (
     MUX_CMD_VEL_TOPIC, ACKERMANN_CMD_TOPIC, E_STOP_TOPIC,
     ANTI_ROLLBACK_AKTIF_TOPIC, ANTI_ROLLBACK_CMD_TOPIC,
     FREN_KOMUT_TOPIC, FREN_IVME_ESIK_MIN, FREN_IVME_ESIK_MAX,
-    FREN_TAM_DUR_ORAN, FREN_RAMP_PER_S,
+    FREN_TAM_DUR_ORAN, FREN_RAMP_PER_S, FREN_GUVENLI_DUR_BINDE,
 )
 from teknofest_ika.otonomi.pure_logic import (
-    ackermann_steering, fren_hedef_hesapla, fren_yumusat,
+    ackermann_komut, fren_hedef_hesapla, fren_yumusat,
 )
 
 
@@ -114,23 +114,46 @@ class AckermannConverter(Node):
         super().__init__('ackermann_converter')
 
         # ── Parametreler ──────────────────────────────────────────────────────
-        # PLACEHOLDER: araç fiziken hazır olunca gerçek değerler ölçülecek.
+        # wheelbase: ön aks ↔ arka aks, 2026-07-27 araçtan ölçüldü (1.40 m).
+        # urdf/arac.urdf teker joint'leri (x=±0.70) ve nav2_params.yaml
+        # minimum_turning_radius (L/tan δ_max) ile TUTARLI tutulur; biri
+        # değişirse diğerleri de değişmeli.
         # Çalışma zamanında değiştirmek için:
-        #   ros2 param set /ackermann_converter wheelbase 0.58
-        self.declare_parameter('wheelbase', 0.55)
+        #   ros2 param set /ackermann_converter wheelbase 1.40
+        self.declare_parameter('wheelbase', 1.40)
         self.declare_parameter('max_steering_angle', 0.5236)   # 30° = π/6
         self.declare_parameter('max_speed', 3.0)
         self.declare_parameter('cmd_vel_timeout', 0.5)         # [s]
 
+        # R_min'den dar bir yay istendiğinde hız eğriliğin taştığı oranda
+        # düşürülür; bu taban altına inilmez. Sahada ölçülen kalkış
+        # sürtünmesi eşiği (nav2_params.yaml min_approach_linear_velocity ve
+        # regulated_linear_scaling_min_speed ile aynı değer) — altında araç
+        # viraj ortasında hareket edemez hale gelir.
+        self.declare_parameter('viraj_taban_hizi', 0.45)       # [m/s]
+
+        # Otomatik fren, hedef hızdaki düşüşten fren oranı üretir. Bu araçta
+        # fren hattı kontrolcünün gaz kesme girişini de çektiği için, hız her
+        # düştüğünde (örn. dar geçişte yavaşlama) gaz kesiliyor ve araç
+        # ilerleyemiyor. Kapatıldığında /fren_komut sabit 0 yayınlanır.
+        self.declare_parameter('otomatik_fren', True)
+
         self._L        = self.get_parameter('wheelbase').value
         self._delta_max = self.get_parameter('max_steering_angle').value
+        self._otomatik_fren = bool(self.get_parameter('otomatik_fren').value)
         self._v_max    = self.get_parameter('max_speed').value
         self._timeout  = self.get_parameter('cmd_vel_timeout').value
+        self._viraj_taban = self.get_parameter('viraj_taban_hizi').value
+
+        # nav2_params.yaml minimum_turning_radius ile aynı büyüklük; orada
+        # elle yazıldığı için burada δ_max'ten türetilir, ikisi ayrışamaz.
+        self._r_min = self._L / math.tan(self._delta_max)
 
         self.get_logger().info(
             f'[AckermannConverter] Başlatıldı | '
             f'wheelbase={self._L:.3f}m | '
             f'δ_max={math.degrees(self._delta_max):.1f}° | '
+            f'R_min={self._r_min:.2f}m | '
             f'v_max={self._v_max:.1f}m/s'
         )
 
@@ -224,7 +247,7 @@ class AckermannConverter(Node):
             self._onceki_hiz   = 0.0
             self._onceki_zaman = None
             self._fren_orani   = 0.0
-            self._fren_pub.publish(UInt16(data=0))
+            self._fren_pub.publish(UInt16(data=FREN_GUVENLI_DUR_BINDE))
             return
 
         # anti_rollback aktifse Nav2 komutunu yoksay
@@ -240,16 +263,26 @@ class AckermannConverter(Node):
         v = twist.linear.x      # İleri hız [m/s]
         ω = twist.angular.z     # Açısal hız [rad/s]
 
-        # ── Direksiyon açısı hesabı — δ = arctan(L × ω / v) ───────────────────
+        # ── Direksiyon açısı ve eğrilik kırpması ──────────────────────────────
         # v ≈ 0 durumunda (Ackermann yerinde dönemez) direksiyon ω işaretine
         # göre maksimuma alınır (Nav2 recovery/spin davranışı için bilinçli
-        # bir karar — "son değer korunur" DEĞİLDİR). Klamplama (servo mekanik
-        # limiti) dahil tüm mantık pure_logic.ackermann_steering()'dedir;
-        # test_birim.py bu fonksiyonu doğrudan test eder.
-        steering = ackermann_steering(v, ω, self._L, self._delta_max)
+        # bir karar — "son değer korunur" DEĞİLDİR). İstenen yay R_min'den
+        # darsa direksiyon doyar ve hız taşma oranında düşürülür, yoksa araç
+        # çizemeyeceği virajı tam hızda dener. Klamplama dahil tüm mantık
+        # pure_logic.ackermann_komut()'tadır; test_birim.py doğrudan test eder.
+        hiz, steering, doydu = ackermann_komut(
+            v, ω, self._L, self._delta_max, self._viraj_taban)
+
+        if doydu:
+            self.get_logger().warn(
+                f'Eğrilik doydu: istenen R={abs(v / ω):.2f}m < '
+                f'R_min={self._r_min:.2f}m → hız {v:.2f}→{hiz:.2f} m/s, '
+                f'δ={math.degrees(steering):.1f}°',
+                throttle_duration_sec=2.0,
+            )
 
         # ── Hız sınırlaması (Karaşimşek/buja kontrolcü limiti) ────────────────
-        speed = max(-self._v_max, min(self._v_max, v))
+        speed = max(-self._v_max, min(self._v_max, hiz))
 
         # ── Otomatik fren — hedef hızdaki ani düşüşten oranı hesapla ─────────
         simdi = self.get_clock().now()
@@ -264,7 +297,8 @@ class AckermannConverter(Node):
             )
         self._onceki_hiz   = speed
         self._onceki_zaman = simdi
-        self._fren_pub.publish(UInt16(data=int(self._fren_orani * 1000)))
+        self._fren_pub.publish(UInt16(
+            data=int(self._fren_orani * 1000) if self._otomatik_fren else 0))
 
         # ── Mesaj güncelle ve yayınla ─────────────────────────────────────────
         self._ackermann_msg.header.stamp     = self.get_clock().now().to_msg()
@@ -295,7 +329,11 @@ class AckermannConverter(Node):
             self._onceki_hiz   = 0.0
             self._onceki_zaman = None
             self._fren_orani   = 0.0
-            self._fren_pub.publish(UInt16(data=0))
+            # Tam fren — sıfır burada freni BIRAKIYORDU. /cmd_vel kesildiğinde
+            # Jetson paket göndermeye devam ettiği için Mega'nın 700 ms heartbeat
+            # failsafe'i de devreye girmiyor; §6.10'un zorunlu duruşunda araç
+            # eğimde frensiz kalıyordu.
+            self._fren_pub.publish(UInt16(data=FREN_GUVENLI_DUR_BINDE))
 
             self.get_logger().warn(
                 f'[WATCHDOG] /cmd_vel {elapsed:.2f}s süredir gelmiyor → araç durduruldu.',

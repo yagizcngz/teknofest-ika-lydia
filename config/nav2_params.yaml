@@ -1,17 +1,21 @@
 ### nav2_params.yaml — LYDİA Nav2 Konfigürasyonu
 #
 # Araç: Ackermann kinematikli İKA
-#   Dingil arası       : 0.55 m   (PLACEHOLDER — wheelbase ölçülmedi)
+#   Dingil arası       : 1.40 m   (2026-07-27 araçtan ölçüldü)
 #   İz genişliği       : 0.90 m   (arka aks, EK-7 B)
 #   Max hız            : 3.0 m/s  (VESC sınırı)
 #   Max direksiyon açısı: 30°
-#   Min dönüş yarıçapı : L / tan(delta_max) = 0.55 / tan(30°) ≈ 0.95 m  (wheelbase placeholder)
+#   Min dönüş yarıçapı : L / tan(delta_max) = 1.40 / tan(30°) ≈ 2.42 m
 #
 # Planner  : SmacPlannerHybrid (DUBIN — sadece ileri hareket, Ackermann uyumlu)
 # Controller: RegulatedPurePursuitController (RPP — Ackermann uyumlu)
 #
-# KURULUM:
-#   sudo apt install ros-humble-nav2-bringup ros-humble-nav2-smac-planner
+# KURULUM (Jetson'da doğrulanmadı — NAV2_AKTIF=1 öncesi kontrol et):
+#   sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup \
+#                    ros-humble-robot-localization
+#   ros-humble-navigation2 smac_planner, regulated_pure_pursuit_controller ve
+#   velocity_smoother'ı da getirir; robot_localization EKF için ayrı paket.
+#   Kontrol: ros2 pkg list | grep -E 'nav2_bringup|nav2_smac|robot_localization'
 #
 # ÇALIŞTIRMA:
 #   ros2 launch nav2_bringup navigation_launch.py \
@@ -34,7 +38,22 @@ bt_navigator:
     navigators: ['navigate_to_pose']
     navigate_to_pose:
       plugin: "nav2_bt_navigator/NavigateToPoseNavigator"
-    default_nav_to_pose_bt_xml: "navigate_to_pose_w_replanning_and_recovery.xml"
+    # ⚠️ TAM YOL ZORUNLU ve ÇALIŞMA ALANINA BAĞLI. Bu iki satır, çalışma alanı
+    # taşınırsa güncellenecek TEK yerdir (boot betiğindeki WS ile aynı kök:
+    # lydia_startup.sh → WS=${WS:-/home/lydia/lydia_ws/src/teknofest_ika_yazilim}).
+    #
+    # Stok ağaçlar KULLANILAMAZ: kurtarma dallarında <Spin> var, Ackermann araç
+    # yerinde dönemediği için nav2_spin_action_bt_node bilerek yüklenmiyor ve
+    # tanınmayan düğüm yüzünden ağaç ayrıştırılamıyor. Sahada görülen sonuç,
+    # yalnız kurtarmanın değil NAV2'NİN TAMAMININ ayağa kalkmaması:
+    #   [bt_navigator] Node not recognized: Spin
+    #   [lifecycle_manager] Failed to bring up all requested nodes. Aborting bringup.
+    # (Jetson launch.log 2026-07-19 19:56)
+    #
+    # İKİSİ DE gerekli: `navigators` yalnız navigate_to_pose dese bile
+    # bt_navigator through_poses ağacını da yüklüyor — o gün öyle düştü.
+    default_nav_to_pose_bt_xml: "/home/lydia/lydia_ws/src/teknofest_ika_yazilim/config/bt/navigate_to_pose_ackermann.xml"
+    default_nav_through_poses_bt_xml: "/home/lydia/lydia_ws/src/teknofest_ika_yazilim/config/bt/navigate_through_poses_ackermann.xml"
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
@@ -103,7 +122,11 @@ controller_server:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
 
       # Hız parametreleri
-      desired_linear_vel: 3.0            # Nominal hız [m/s]
+      # 0.65 = sahada doğrulanmış tek otonom tavan (2026-07-28 tam tur).
+      # Çalışma anında terrain_adapter arazi profiline göre üzerine yazar
+      # (0.45–0.90); buradaki değer terrain_adapter düşerse geçerli olan
+      # yedektir, o yüzden en güvenli profille aynı olmalı.
+      desired_linear_vel: 0.65           # Nominal hız [m/s]
       lookahead_dist: 2.0               # [m] — lookahead başlangıç mesafesi
       min_lookahead_dist: 1.2           # [m] — minimum lookahead
       max_lookahead_dist: 4.0           # [m] — maksimum lookahead
@@ -114,15 +137,28 @@ controller_server:
       transform_tolerance: 0.2
 
       # Hız düzenleme
+      # KALKIŞ SÜRTÜNMESİ TABANI: araç 0.45 m/s altındaki komutlarda yerinden
+      # kalkmıyor (DAC voltajı doğru yazılıyor, tekerlek dönmüyor). RPP'nin
+      # hedefe yaklaşırken hızı 0.05'e indirmesi aracı hedefin hemen öncesinde
+      # durduruyor; progress_checker 20 s sonra "ilerleme yok" deyip recovery
+      # tetikliyor. Yaklaşma hızı tabanın üstünde tutulup tolerans içinde
+      # sıfıra düşülüyor.
       use_velocity_scaled_lookahead_dist: true
-      min_approach_linear_velocity: 0.05
+      min_approach_linear_velocity: 0.45
       approach_velocity_scaling_dist: 2.5
 
-      # Eğrilik bazlı hız sınırlama
-      # Ackermann aracın maksimum dönüş yarıçapı: ~0.95 m
+      # Eğrilik bazlı hız sınırlama.
+      # Eşik 1.0 m idi ve ÖLÜ KURALDI: aracın çizebildiği en dar yay
+      # R_min = L/tan(δ_max) = 1.40/tan(30°) = 2.42 m, yani hiçbir yay 1.0 m'nin
+      # altına inemez ve kısma hiç tetiklenmezdi. (Yanındaki "maksimum dönüş
+      # yarıçapı ~0.95 m" notu da yanlıştı — 0.95 m bu araçta ulaşılamaz.)
+      # Eşik R_min'in ÜSTÜNDE olmalı ki kısma direksiyon doymadan önce başlasın:
+      # 3.0 m'de R=2.42'lik tam kilit yayı 0.65 × (2.42/3.0) ≈ 0.52 m/s'ye
+      # düşer — kalkış sürtünmesi tabanının (0.45) üstünde kalır.
+      # Sahada ilk koşudan sonra ölçümle ayarlanmalı.
       use_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 1.0   # [m] — bu yarıçapın altında yavaşla
-      regulated_linear_scaling_min_speed: 0.25   # [m/s] — minimum hız
+      regulated_linear_scaling_min_radius: 3.0   # [m] — bu yarıçapın altında yavaşla
+      regulated_linear_scaling_min_speed: 0.45   # [m/s] — kalkış sürtünmesi tabanı
 
       # Engel durma — taşlı yolda sert dur yerine yavaşla
       use_collision_detection: false
@@ -132,9 +168,12 @@ controller_server:
       inflation_cost_scaling_factor: 3.0
 
       # Ackermann kısıtı
-      # max angular = v * tan(delta_max) / L = 3.0 * tan(30°) / 0.55 ≈ 3.14 rad/s
-      # Güvenlik için 1.0 rad/s ile başla, araçta artır
-      max_angular_vel: 1.8             # [rad/s]
+      # RPP'de `max_angular_vel` diye bir parametre YOK — burada tanımlanırsa
+      # sessizce yok sayılır. Açısal hız tavanı iki yerde uygulanır:
+      #   1) velocity_smoother.max_velocity[2]  (aşağıda, gerçek kırpma)
+      #   2) ackermann_converter eğrilik kırpması (κ = ω/v, ±1/R_min'de doyar;
+      #      doyunca hız da taşma oranında düşürülür ve loga uyarı basılır)
+      max_angular_accel: 3.2           # [rad/s²]
       max_robot_pose_search_dist: 10.0
 
       use_interpolation: false
@@ -160,7 +199,7 @@ planner_server:
       angle_quantization_bins: 72              # 5° çözünürlük
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
-      minimum_turning_radius: 0.95   # L / tan(delta_max) = 0.55/tan(30°) [m]
+      minimum_turning_radius: 2.42   # L / tan(delta_max) = 1.40/tan(30°) [m]
       reverse_penalty: 5.0           # Geri gitmeyi caydır (tercihe göre azalt)
       change_penalty: 0.1
       non_straight_penalty: 1.20
@@ -171,6 +210,49 @@ planner_server:
       use_quadratic_cost_penalty: false
       downsample_obstacle_heuristic: true
       allow_reverse_expansion: false   # Geri manevra yoksa false
+
+# ─── Velocity Smoother — /cmd_vel'i BASAN düğüm ──────────────────────────────
+# navigation_launch.py zincirinde controller_server doğrudan /cmd_vel'e yazmaz:
+#   controller_server → /cmd_vel_nav → velocity_smoother → /cmd_vel
+#                                                            └→ mod_yoneticisi
+# Bu blok yoksa velocity_smoother varsayılanlarıyla çalışır ve
+# max_velocity[0] = 0.50 m/s olduğu için arazi profillerinin 0.50 üstündeki
+# hızları (normal 0.65, fast 0.90) sessizce kırpılır — terrain_adapter
+# parametreyi başarıyla yazar, araç yine de hızlanmaz.
+#
+# scale_velocities: Ackermann'da şart. Kırpma yalnız v'ye uygulanırsa ω/v oranı
+# (dolayısıyla direksiyon açısı) bozulur ve araç fazla kırar; true iken iki
+# bileşen birlikte ölçeklenir, eğrilik korunur.
+#
+# max_accel DÜŞÜRÜLMEMELİ: araç 0.45 m/s altında yerinden kalkmıyor, yavaş
+# rampa aracı bu ölü bandın içinde tutar ve kalkış hiç olmaz.
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: false
+    smoothing_frequency: 20.0
+    scale_velocities: true
+    feedback: "OPEN_LOOP"
+    #             [  vx,   vy,  wz ]
+    # wz tavanı aracın kinematiğinden gelir: ω_max = v_max / R_min,
+    # 0.90 / 2.42 = 0.37 rad/s. Daha yüksek bir tavan komut zincirinde
+    # karşılığı olmayan eğrilik taşır. Bu tavan tek başına yetmez: burada
+    # scale_velocities oranı koruduğu için istenen yarıçap değişmeden yalnız
+    # hız düşer, yani aynı taşma daha yavaşta tekrarlanır. Zincirin sonunda
+    # ackermann_converter eğriliği R_min'e kırpar ve hızı taşma oranında
+    # düşürür — asıl emniyet orada. R_min planlayıcıdaki
+    # minimum_turning_radius ile aynı değerdir, biri değişirse diğeri de değişir.
+    max_velocity: [0.90, 0.0, 0.37]   # vx: en hızlı arazi profili (fast)
+    # Geri hızı YALNIZ BackUp kurtarması kullanır (planlayıcı DUBIN, geri
+    # planlamıyor). Tavan −0.30 idi ve ÖLÜYDÜ: araç 0.45 m/s altında yerinden
+    # kalkmıyor (sahada ölçüldü), yani geri komutu verilse bile araç kımıldamazdı.
+    # −0.50, BT'deki backup_speed 0.5 ile birlikte kalkış eşiğinin üstünde kalır.
+    min_velocity: [-0.50, 0.0, -0.37]
+    max_accel:    [2.50, 0.0, 3.20]
+    max_decel:    [-2.50, 0.0, -3.20]
+    deadband_velocity: [0.05, 0.0, 0.05]
+    velocity_timeout: 0.5             # ackermann_converter cmd_vel_timeout ile aynı
+    odom_topic: /odometry/filtered
+    odom_duration: 0.1
 
 # ─── Smoother ────────────────────────────────────────────────────────────────
 smoother_server:
@@ -232,12 +314,11 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        # koni_cloud (/cone_cloud, koni_costmap.py) kasıtlı olarak ÇIKARILDI:
-        # bu topic'in tek üreticisi /cone_positions PoseArray'i bekleyen
-        # koni_costmap.py'dir ve /cone_positions'a hiçbir node yayın yapmıyor
-        # — kaynak hep boş kalıyordu. Gerçek koni engeli yolo_cone_cloud
-        # (cone_fusion_node, LiDAR+YOLO füzyonu) üzerinden geliyor.
-        observation_sources: scan yolo_cone_cloud moving_obs_cloud orbbec_cloud
+        # Koni engeli yalnız yolo_cone_cloud üzerinden gelir
+        # (cone_fusion_node, LiDAR+YOLO füzyonu). Kamera koniyi görür ama
+        # mesafesini bilmez, LiDAR mesafeyi bilir ama neyin ne olduğunu
+        # bilmez; ikisi eşleşmeden koni costmap'e LETHAL basılamaz.
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
         scan:
           topic: /scan/filtered
           max_obstacle_height: 2.0
@@ -269,9 +350,16 @@ global_costmap:
           obstacle_max_range: 4.0
           obstacle_min_range: 0.0
           observation_persistence: 0.5
-        # Orbbec Gemini 335L Derinlik Kamerasi
-        orbbec_cloud:
-          topic: /depth/points/filtered
+        # /apc/points/data_raw `points_frame` ile yayınlanır. OS30A'nın kendi
+        # launch'ı yalnız dm_base_frame → points_frame dönüşümünü basar;
+        # dm_base_frame'i base_link'e bağlayan TF açılış betiğinde
+        # (OS30A_TF_AKTIF) üretilir. O yayıncı yoksa bu kaynak ayrı bir TF
+        # adasında kalır, costmap tek bir noktayı bile dönüştüremez ve
+        # "Transform failure" ile sürekli log basar.
+        # Menzil notu: OS30A fiilen 0.02–2.5 m görüyor, aşağıdaki 5–6 m
+        # tavanları sensör limitinin üstünde — kırpan sensörün kendisi.
+        os30a_cloud:
+          topic: /apc/points/data_raw
           min_obstacle_height: 0.05
           max_obstacle_height: 1.50
           clearing: true
@@ -310,7 +398,7 @@ local_costmap:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         # koni_cloud çıkarıldı — bkz. global_costmap'teki açıklama (üreticisi yok).
-        observation_sources: scan yolo_cone_cloud moving_obs_cloud orbbec_cloud
+        observation_sources: scan yolo_cone_cloud moving_obs_cloud os30a_cloud
         scan:
           topic: /scan/filtered
           max_obstacle_height: 2.0
@@ -342,9 +430,8 @@ local_costmap:
           obstacle_max_range: 4.0
           obstacle_min_range: 0.0
           observation_persistence: 0.5
-        # Orbbec Gemini 335L Derinlik Kamerasi
-        orbbec_cloud:
-          topic: /depth/points/filtered
+        os30a_cloud:
+          topic: /apc/points/data_raw
           min_obstacle_height: 0.05
           max_obstacle_height: 1.50
           clearing: true
@@ -367,11 +454,16 @@ local_costmap:
 amcl:
   ros__parameters:
     use_sim_time: false
-    alpha1: 0.2
-    alpha2: 0.2
-    alpha3: 0.2
-    alpha4: 0.2
-    alpha5: 0.2
+    # Odometri gürültü modeli — kinematik kısıt değil, parçacıkların odometri
+    # artışına göre ne kadar yayılacağını belirler. Araca özgü olan kısım budur:
+    # Ackermann viraj alırken kayar, bu yüzden dönüşten gelen öteleme belirsizliği
+    # (alpha4) yükseltilir; yerinde dönüş olmadığı için dönüşten gelen dönüş
+    # belirsizliği (alpha1) düşürülür.
+    alpha1: 0.1   # dönüşten gelen dönüş gürültüsü
+    alpha2: 0.2   # ötelemeden gelen dönüş gürültüsü
+    alpha3: 0.3   # ötelemeden gelen öteleme gürültüsü — Ackermann biraz kayar
+    alpha4: 0.3   # dönüşten gelen öteleme gürültüsü — virajda parçacıkları yay
+    alpha5: 0.1   # yalnız omni modelde kullanılır
     base_frame_id: base_footprint
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
@@ -392,9 +484,13 @@ amcl:
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
     resample_interval: 1
-    # Ackermann kinematikli araç — DifferentialMotionModel yanlış sonuç verir
-    # (yerinde dönüş varsayar, araç dönemez).
-    robot_model_type: nav2_amcl::AckermannMotionModel
+    # nav2_amcl yalnız iki hareket modeli sınıfı yayınlar (plugins.xml):
+    # DifferentialMotionModel ve OmniMotionModel. Ackermann adında bir sınıf
+    # YOKTUR; yazılırsa amcl_node pluginlib'den istisna alır, on_configure
+    # başarısız olur ve lifecycle yöneticisi yerelleştirme grubunu hiç
+    # ayağa kaldıramaz. Araca uyarlama sınıf adıyla değil, yukarıdaki alpha
+    # katsayılarıyla yapılır.
+    robot_model_type: nav2_amcl::DifferentialMotionModel
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
@@ -423,7 +519,14 @@ map_saver:
     map_subscribe_transient_local: true
 
 # ─── Lifecycle Manager ────────────────────────────────────────────────────────
-lifecycle_manager:
+# Düğüm adı navigation_launch.py'de `lifecycle_manager_navigation`; anahtar
+# `lifecycle_manager` yazılırsa blok hiç eşleşmez ve tamamen yok sayılır.
+#
+# autostart ve node_names'i navigation_launch.py açık parametre override'ı
+# olarak geçirir — override params dosyasını yener, yani aşağıdaki liste
+# BELGE niteliğindedir, yönetilen düğümleri buradan değiştiremezsin.
+# Launch'ın yönettiği gerçek liste waypoint_follower'ı da içerir.
+lifecycle_manager_navigation:
   ros__parameters:
     use_sim_time: false
     autostart: true
@@ -433,6 +536,7 @@ lifecycle_manager:
       - planner_server
       - behavior_server
       - bt_navigator
+      - waypoint_follower
       - velocity_smoother
 
 # lifecycle_manager_localization kaldırıldı — SLAM_Toolbox kullanılıyor, AMCL aktif değil.

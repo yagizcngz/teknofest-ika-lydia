@@ -46,6 +46,41 @@ def ackermann_steering(v: float, omega: float, wheelbase: float,
     return max(-delta_max, min(delta_max, math.atan(wheelbase * omega / v)))
 
 
+def ackermann_komut(v: float, omega: float, wheelbase: float,
+                     delta_max: float, taban_hiz: float) -> tuple:
+    """
+    (hız, δ, doydu) — istenen eğriliği aracın çizebileceğine kırpar ve
+    taşma oranında hızı düşürür.
+
+    δ'yı tek başına kırpmak yetmez: R_min = L / tan(δ_max)'ten dar bir yay
+    istendiğinde direksiyon doyar ama hız isteneni korur, yani araç
+    çizemeyeceği virajı tam hızda dener ve dışarı taşar. Doyma sessizdir —
+    ne komutta ne geri beslemede izi kalır.
+
+    Kırpma eğrilik (κ = ω/v) üzerinden yapılır; κ'yı ±1/R_min'de sınırlamak
+    δ'yı ±δ_max'ta sınırlamakla özdeştir, dolayısıyla direksiyon çıktısı
+    değişmez. Değişen tek şey hız: κ ne kadar taşıyorsa o oranda düşürülür,
+    böylece kontrolcü metre başına daha çok döngü koşar ve sapmayı erken
+    yakalar. Yavaşlamak imkânsız virajı mümkün kılmaz — yay yine R_min'dir.
+
+    taban_hiz kalkış sürtünmesi tabanıdır: oransal kırpma tek başına aracı
+    viraj ortasında hareket edemeyeceği bir hıza düşürebilir. İstenen hız
+    zaten tabanın altındaysa yükseltilmez.
+    """
+    delta = ackermann_steering(v, omega, wheelbase, delta_max)
+    if abs(v) < 1e-4:
+        return v, delta, False
+
+    kappa_max = math.tan(delta_max) / wheelbase      # 1 / R_min
+    kappa     = omega / v
+    if abs(kappa) <= kappa_max:
+        return v, delta, False
+
+    oran   = kappa_max / abs(kappa)
+    yeni_v = math.copysign(max(abs(v) * oran, min(abs(v), taban_hiz)), v)
+    return yeni_v, delta, True
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # 2. Enkoder Overflow Koruması (AS5600 10-bit ADC)
 # ─────────────────────────────────────────────────────────────────────────
@@ -143,10 +178,21 @@ def imu_guvenlik_hiz(roll_deg: float, pitch_deg: float, batarya_yuzde: float,
                       roll_warn: float, roll_stop: float, roll_estop: float,
                       pitch_down: float, normal_max_hiz: float,
                       frenleme_hiz: float, bat_dusuk_yuzde: float,
-                      bat_kritik_yuzde: float, bat_dusuk_hiz: float) -> float:
+                      bat_kritik_yuzde: float, bat_dusuk_hiz: float,
+                      taban_hiz: float = 0.0) -> float:
     """
     imu_guvenlik.py._yayinla() ile birebir aynı karar ağacı.
     Roll/pitch/batarya durumuna göre güvenli azami hızı [m/s] döndürür.
+
+    taban_hiz kalkış sürtünmesi eşiğidir ve yalnız yan eğim rampasına
+    uygulanır: rampanın çıktısı sıfır ile taban arasında kalamaz. O aralık
+    aracın icra edemediği bir bölge — motor döner, araç kalkmaz, yan eğimin
+    ortasında duraksayıp bir daha hareket edemez. Ya işe yarayan bir hızla
+    ilerlenir ya da bilerek durulur.
+
+    Yokuş aşağı fren moduna uygulanmaz: orada kısıt kalkış değil hızı geri
+    tutmak, ve düşük komut daha çok frenlemek demek. Onu tabana yükseltmek
+    %45 inişte frenlemeyi azaltırdı.
     """
     roll_abs = abs(roll_deg)
 
@@ -157,6 +203,8 @@ def imu_guvenlik_hiz(roll_deg: float, pitch_deg: float, batarya_yuzde: float,
     elif roll_abs >= roll_warn:
         oran = 1.0 - (roll_abs - roll_warn) / (roll_stop - roll_warn)
         hiz = normal_max_hiz * 0.5 * max(0.0, oran)
+        if 0.0 < hiz < taban_hiz:
+            hiz = taban_hiz
     elif pitch_deg <= -pitch_down:
         hiz = frenleme_hiz
     else:
@@ -231,18 +279,102 @@ def stop_check(stop_var: bool, cooldown_bitis: float, now: float) -> bool:
 # 10. HizlanmaState Hız Profili (§6.11)
 # ─────────────────────────────────────────────────────────────────────────
 
-def hizlanma_hiz_profili(dist: float, max_hiz: float, toplam_mesafe: float,
-                          fren_basi_mesafe: float, min_hiz: float = 0.3) -> float:
+def hizlanma_hiz_profili(dist: float, max_hiz: float,
+                          olcum_mesafe: float) -> float:
     """
-    0..fren_basi_mesafe  → max_hiz
-    fren_basi..toplam    → doğrusal düşüş, min_hiz'in altına inmez
-                           (seri_kopru heartbeat timeout'unu engellemek için).
+    Şartname §6.11: 30 metre boyunca bitiş çizgisinin SONUNA KADAR ivmeli
+    gidilir; durma payı çizginin ötesinde ayrıca verilir. Ölçülen bölümün
+    içinde yavaşlamak, yalnız ilk altı takıma puan veren bir kalemde
+    sıralama kaybetmek demek.
+
+    Çizgide hız doğrudan sıfıra çekilir, rampa kurulmaz: fren zinciri
+    (fren_hedef_hesapla) yavaşlama isteğinin BÜYÜKLÜĞÜNE bakıyor ve durma
+    payına yayılmış yumuşak bir iniş eşiğin (FREN_IVME_ESIK_MIN) çok
+    altında kalıp freni hiç tetiklemiyor — araç yalnızca boşta yavaşlardı.
+    Sıfır komutu hem ivme terimini doyuruyor hem de hedef_hiz == 0 dalından
+    tam dur oranını taban yapıyor.
     """
-    if dist < fren_basi_mesafe:
-        return max_hiz
-    kalan = toplam_mesafe - dist
-    fren_uzunlugu = toplam_mesafe - fren_basi_mesafe
-    return max(min_hiz, max_hiz * (kalan / fren_uzunlugu))
+    return max_hiz if dist < olcum_mesafe else 0.0
+
+
+def aci_sarmala(aci: float) -> float:
+    """Açıyı (-pi, pi] aralığına indirir."""
+    return math.atan2(math.sin(aci), math.cos(aci))
+
+
+def tarama_yan_mesafe(ranges, angle_min: float, angle_increment: float,
+                       merkez_aci: float, yarim_pencere: float,
+                       menzil_min: float, menzil_max: float):
+    """
+    Taramada `merkez_aci` çevresindeki pencerenin medyan mesafesi [m],
+    geçerli ışın yoksa None.
+
+    Medyan alınıyor çünkü tek bir ışın bariyerdeki boşluğa, direğe ya da
+    yağmura denk gelebiliyor; ortalama bu aykırı değerlerden kayar.
+    Menzil dışı ve NaN ışınlar pencereye hiç girmez.
+
+    Pencere karşılaştırması sarmalı yapılıyor: LiDAR gövdeye 93,3° dönük
+    monte, dolayısıyla aracın sağı tarama çerçevesinde ±180° civarına
+    düşüyor ve düz çıkarma o sınırda pencereyi ikiye böler.
+    """
+    if angle_increment == 0.0 or not ranges:
+        return None
+
+    gecerli = []
+    for i, r in enumerate(ranges):
+        aci = angle_min + i * angle_increment
+        if abs(aci_sarmala(aci - merkez_aci)) > yarim_pencere:
+            continue
+        if r != r:                      # NaN
+            continue
+        if r < menzil_min or r > menzil_max:
+            continue
+        gecerli.append(r)
+
+    if not gecerli:
+        return None
+    gecerli.sort()
+    orta = len(gecerli) // 2
+    if len(gecerli) % 2:
+        return gecerli[orta]
+    return (gecerli[orta - 1] + gecerli[orta]) / 2.0
+
+
+def koridor_sapmasi(sol, sag, koridor_genisligi: float,
+                     tolerans: float = 0.6):
+    """
+    (sapma, durum) — sapma > 0 ise araç koridorun SAĞINA kaymıştır.
+
+    Şartname §6.9 tümsekli bölümde parkurun ortalanmasını istiyor; §6.1'e
+    göre koridor 3 m ve iki yanı sürekli bariyerli, bariyerler 80 ± 10 cm
+    yüksekliğinde — yani LiDAR düzleminde (55 cm) iki duvar da görünüyor.
+
+    sol + sağ toplamı koridor genişliğini tutmuyorsa ölçüm koridora ait
+    değildir: bir duvar görülmemiş, aşama açıklığına ya da bir yan yola
+    denk gelinmiştir. O okuma sapma diye raporlanırsa aracı yanlış yöne
+    çeker, bu yüzden 'koridor_yok' ile ayrılır.
+    """
+    if sol is None or sag is None:
+        return 0.0, 'olcum_yok'
+    if abs((sol + sag) - koridor_genisligi) > tolerans:
+        return 0.0, 'koridor_yok'
+    return (sol - sag) / 2.0, 'gecerli'
+
+
+def durma_degerlendir(asilan_mesafe: float, hiz: float, butce: float,
+                       hiz_esigi: float = 0.05) -> str:
+    """
+    'durdu' | 'butce_asildi' | 'devam' — bitiş çizgisi geçildikten sonra.
+
+    Şartname §6.11 çizginin ötesinde 10 m emniyetli durma payı veriyor ve
+    o pay içinde duramayan araca ceza yazıyor. Duruşun gerçekten olup
+    olmadığı ölçülmezse ceza ancak hakem masasında öğrenilir.
+    """
+    if abs(hiz) <= hiz_esigi:
+        return 'durdu'
+    if asilan_mesafe >= butce:
+        return 'butce_asildi'
+    return 'devam' 
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -292,10 +424,22 @@ def fren_yumusat(mevcut: float, hedef: float, ramp_oran_per_s: float, dt: float)
 
 class DetectionsStore:
     """
-    /ika/detections topic'inden gelen son JSON paketini saklar.
-    SMACH state'leri bu store'dan okur — doğrudan topic callback'e bağımlı değiller.
+    misyon_fsm'in paylaşılan son-durum deposu. İki ayrı kaynaktan beslenir:
+
+      update()       — /ika/detections JSON paketi (yolo_adapter_node).
+                       Paketin sahibi olduğu alanlar her karede yeniden gelir;
+                       gelmeyen alan _DEFAULT'a döner (bir karede görülen hedef
+                       sonraki karede yoksa "hâlâ var" sayılmamalıdır).
+      update_field() — ayrı topic'ler: /e_stop, /mod_aktif,
+                       /moving_obs/direction.
+
     threading.Lock ile thread-safe erişim sağlanır.
     """
+
+    # Sahibi /ika/detections DEĞİL. update() bu alanlara dokunmaz: aksi halde
+    # ön kamera karesi başına (29.9 Hz) E-STOP, manuel mod ve kayar engel yönü
+    # silinir ve FSM'in bu üç bayrağa bakan tüm kontrolleri hep False okur.
+    _DIS_KAYNAKLI = ('e_stop', 'manual_mod', 'kayar_yon')
 
     _DEFAULT = {
         'tabela':           255,
@@ -321,7 +465,8 @@ class DetectionsStore:
 
     def update(self, data: dict):
         with self._lock:
-            self._data = {**self._DEFAULT, **data}
+            dis = {k: self._data[k] for k in self._DIS_KAYNAKLI}
+            self._data = {**self._DEFAULT, **data, **dis}
 
     def update_field(self, key: str, value):
         with self._lock:
@@ -334,3 +479,499 @@ class DetectionsStore:
     def get_field(self, key, default=None):
         with self._lock:
             return self._data.get(key, default)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ŞARTNAME §6.12 KOŞU SAATİ / §9 PAS HAKKI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def kosu_butcesi(istenen_s: float, kalan_s: float) -> float:
+    """
+    Bir aşamaya verilebilecek gerçek süre (§6.12).
+
+    Aşama timeout'u tek başına koşuyu sınırlamıyordu: 11 aşama × 120 s = 22
+    dakika, 15 dakikalık koşu limitinin bir buçuk katı. Kalan süreden uzun bir
+    timeout, dolduğunda araç zaten parkurdan çıkarılmış olacağı için yalnız
+    kâğıt üzerinde vardır.
+    """
+    return max(0.0, min(istenen_s, kalan_s))
+
+
+def pas_verilebilir(pas_gecilir: bool, label: str, pas_kullanildi: int,
+                    pas_hakki: int, pas_gecilemez) -> tuple:
+    """
+    Şartname §9 pas kuralları. Dönüş: (izin: bool, gerekce: str).
+
+    Üç kapı da geçilmeli:
+
+      1. Aşama için pas bilinçli olarak açılmış olmalı. Varsayılan kapalıdır:
+         pas, timeout'un otomatik sonucu değil sahadaki insan kararıdır —
+         §9 pas geçmeyi "takım üyeleri parkura girerek araçlarını pas geçilen
+         parkurun sonuna insan gücüyle taşıyarak konumlandıracaktır" diye
+         tanımlar.
+      2. Hızlanma parkuru ve otonom koşuda trafik konileri pas geçilemez;
+         konfigürasyon ne derse desin bu iki aşama atlanmaz.
+      3. Pas hakkı koşu başına 1 adettir. Sayaç olmadığı sürece art arda
+         timeout'a giren üç aşama üç kez atlanıyordu; ikinci pasın hakem
+         tablosunda karşılığı yok.
+    """
+    if not pas_gecilir:
+        return False, 'kapali'
+    if label in pas_gecilemez:
+        return False, 'sartname_yasak'
+    if pas_kullanildi >= pas_hakki:
+        return False, 'hak_bitti'
+    return True, 'izin'
+
+
+def rc_mod_otonom(ch5_us: float, esik_us: float) -> bool:
+    """
+    RC mod potundan (CH6 VRB) otonom istenip istenmediğini döndürür.
+
+    Karar bilerek İKİLİ ve tek eşiklidir, çünkü aynı kanalı Mega da okuyor
+    (arduino/src/main.cpp guncel_mod, config.h RC_MOD_ESIK) ve eşiğin altında
+    RC'yi doğrudan sürüp Jetson'ın sürüş paketlerini yok sayıyor. ROS tarafı
+    kanalı başka bir yerden bölerse potun arada kaldığı bantta iki taraf aynı
+    anda farklı modda olur; kanal üç konumlu bir anahtar değil sürekli bir pot
+    olduğu için o bant kazayla girilebilecek bir yerdir.
+
+    Eşikte eşitlik otonom sayılır — firmware de `> esik` değil kendi
+    karşılaştırmasında aynı sınırı kullanıyor.
+    """
+    return ch5_us >= esik_us
+
+
+def kurtarma_karari(retry_count: int, max_retries: int) -> str:
+    """
+    Bir aşama başarısız olduğunda ne yapılacağı. Dönüş: 'tekrar' | 'sonraki'.
+
+    'sonraki' geldiğinde aşamadan vazgeçilip waypoint indeksi ilerletilir;
+    görev İPTAL EDİLMEZ. Tek bir istasyonda takılıp koşuyu bitirmek, o
+    istasyonun puanından çok daha fazlasına mal oluyordu: aşağı akışta
+    koniler (50), kayar engel (50), atış (50), hızlanma (25) ve sıralamaya
+    giren koşu süresi (100) duruyor. 5 puanlık bir aşama uğruna bunların
+    tamamı gidiyordu.
+
+    Vazgeçmek §9 pası DEĞİLDİR — pas kararı `pas_verilebilir`'de ve fiziksel
+    bir işlemdir (araç aşama sonuna elle taşınır, puan eksiye yazılır).
+    Burada araç sürmeye devam eder; istasyonlar tek koridorda arka arkaya
+    dizili olduğu için engelin içinden geçmeyi fiilen denemeyi sürdürür.
+
+    Görevi bitiren iki yol buraya hiç uğramaz: E-STOP ve §6.12 süre dolması.
+    """
+    return 'sonraki' if retry_count >= max_retries else 'tekrar'
+
+
+def rampa_faz_gecisi(faz: str, pitch_mutlak: float, pitch_esik: float,
+                     faz_mesafe: float, yaklasma_max_m: float,
+                     egim_max_m: float) -> str:
+    """
+    Rampa aşamasının faz geçişi. Dönüş: 'yaklasma' | 'egimde' | 'bitti' |
+    'bulunamadi' | 'asildi'.
+
+    Faz sinyali KONUM değil PİTCH: waypoint koordinatları kayabilir, odometri
+    sapar, ama araç eğimdeyse IMU bunu mutlak olarak söyler. Pitch'in mutlak
+    değeri kullanıldığı için aynı mantık hem tırmanışta hem inişte çalışır.
+
+    İki mesafe sınırı emniyet içindir, kontrol için değil:
+      yaklasma_max_m — bu kadar sürüldüğü hâlde eğim başlamadıysa araç rampanın
+                       önünde değildir; körlemesine ilerlemek yerine iptal.
+      egim_max_m     — eğim bu mesafede bitmediyse pitch okuması bozuk demektir
+                       (IMU montaj yönü doğrulanmadan bu gerçek bir olasılık).
+    """
+    if faz == 'yaklasma':
+        if pitch_mutlak >= pitch_esik:
+            return 'egimde'
+        if faz_mesafe > yaklasma_max_m:
+            return 'bulunamadi'
+        return 'yaklasma'
+    if faz == 'egimde':
+        if pitch_mutlak < pitch_esik:
+            return 'bitti'
+        if faz_mesafe > egim_max_m:
+            return 'asildi'
+        return 'egimde'
+    return faz
+
+
+def koridor_merkez_cizgisi(ranges, angle_min: float, angle_increment: float,
+                           lidar_yaw: float, koridor_genisligi: float = 3.0,
+                           adim_m: float = 0.5, maks_ileri: float = 10.0,
+                           maks_yanal: float = 2.2, menzil_min: float = 0.05,
+                           menzil_max: float = 12.0, tolerans: float = 0.6):
+    """
+    Tek taramadan koridorun merkez çizgisi — araç çerçevesinde zincir.
+
+    Dönüş: `[(x, y, guven), ...]` — araçtan uzaklaşan sırada, +x ileri, +y sol.
+    `guven` ∈ {'iki_duvar', 'tek_duvar', 'belirsiz'}; duvarın hiç görülmediği
+    adımda zincir kesilir.
+
+    Açı konvansiyonu KoridorIzleyici ile aynı: LiDAR gövdeye dönük monte
+    olduğu için araç açısı = tarama açısı + `lidar_yaw`.
+
+    NEDEN ZİNCİR, NEDEN ARACIN İLERİ EKSENİNDE KUTULAMA DEĞİL
+    ─────────────────────────────────────────────────────────────────────────
+    Işınları aracın ileri eksenine göre kutulamak düz şeritte çalışır ama U
+    dönüşünde çöker: koridor yana kıvrıldığı için aracın 5 m ilerisinde
+    koridor yoktur, iki duvar aynı kutuya hiç düşmez. Parkur CAD'ine karşı
+    ölçüldüğünde sol U dönüşünde 6,8 m, sağ U'da 4,5 m boyunca hiç hedef
+    üretilemiyordu.
+
+    Bunun yerine zincir yürütülür: her adımda mevcut yöne DİK bakılıp iki
+    duvar aranır, merkez bulunur, yön o merkeze göre güncellenir. Zincir
+    koridorun eğriliğini takip eder.
+
+    NEDEN EN YAKIN DEĞİL EN UZAK DÖNÜŞ
+    ─────────────────────────────────────────────────────────────────────────
+    Bir yandaki `maks_yanal` içindeki EN UZAK dönüş duvar sayılır. En yakını
+    almak koniyi, kayar engeli ya da bariyer önündeki her şeyi duvar sanar ve
+    merkez çizgisi engellerin peşinden sürüklenir. İş bölümü net: merkez
+    çizgisi KORİDORU bulur, engellerden kaçınmak costmap'in işidir.
+
+    TUTARLILIK KAPISI
+    ─────────────────────────────────────────────────────────────────────────
+    İki duvar da görülüyorsa toplamları koridor genişliğini tutmalı
+    (`koridor_sapmasi` ile aynı gerekçe). Tutmuyorsa ölçüm koridora ait
+    değildir — bariyer boşluğundan sızan ışın ya da duvar sanılan bir engel —
+    ve adım 'belirsiz' işaretlenir.
+    """
+    if angle_increment == 0.0 or not ranges or adim_m <= 0.0:
+        return []
+
+    noktalar = []
+    for i, r in enumerate(ranges):
+        if r != r:                              # NaN
+            continue
+        if r < menzil_min or r > menzil_max:
+            continue
+        aci = angle_min + i * angle_increment + lidar_yaw
+        noktalar.append((r * math.cos(aci), r * math.sin(aci)))
+    if not noktalar:
+        return []
+
+    yari = koridor_genisligi / 2.0
+    px, py = 0.0, 0.0                           # zincirin ucu (araç)
+    dx, dy = 1.0, 0.0                           # mevcut yön
+    cizgi = []
+    for _ in range(max(1, int(maks_ileri / adim_m))):
+        ax, ay = px + dx * adim_m, py + dy * adim_m       # aday nokta
+        nx, ny = -dy, dx                                  # yöne dik (sol +)
+        sol = sag = None
+        for qx, qy in noktalar:
+            ux, uy = qx - ax, qy - ay
+            if abs(ux * dx + uy * dy) > adim_m / 2.0:     # zincir boyunca dilim
+                continue
+            t = ux * nx + uy * ny                         # yönü dikine mesafe
+            if abs(t) > maks_yanal:
+                continue
+            if t >= 0.0:
+                if sol is None or t > sol:
+                    sol = t
+            else:
+                if sag is None or -t > sag:
+                    sag = -t
+
+        if sol is not None and sag is not None:
+            ofset = (sol - sag) / 2.0
+            guven = ('iki_duvar'
+                     if abs((sol + sag) - koridor_genisligi) <= tolerans
+                     else 'belirsiz')
+        elif sol is not None:
+            ofset, guven = sol - yari, 'tek_duvar'
+        elif sag is not None:
+            ofset, guven = yari - sag, 'tek_duvar'
+        else:
+            break                                # koridor bitti, zincir kesilir
+
+        yx, yy = ax + nx * ofset, ay + ny * ofset
+        uzunluk = math.hypot(yx - px, yy - py)
+        if uzunluk < 1e-6:
+            break
+        dx, dy = (yx - px) / uzunluk, (yy - py) / uzunluk   # yön koridoru izler
+        px, py = yx, yy
+        cizgi.append((px, py, guven))
+    return cizgi
+
+
+def kayan_hedef(cizgi, min_ileri: float = 2.0, maks_ileri: float = 8.0,
+                kabul=('iki_duvar',)):
+    """
+    Merkez çizgisinden kayan Nav2 hedefi. Dönüş: `(x, y, yaw)` ya da None.
+
+    Hedef, `kabul` edilen güven düzeyine sahip ve araca `maks_ileri`den yakın
+    olan EN SON zincir noktasıdır. Zincir sırası mesafe sırasıdır; x'e göre
+    sıralamak virajda yanlış olur çünkü koridor geri kıvrılınca x azalır.
+
+    Mesafenin kendiliğinden ayarlanması istenen bir özellik: düz şeritte
+    duvarlar uzağa kadar görünür ve hedef uzaklaşır; U dönüşünde zincir erken
+    kesilince hedef kendiliğinden yakınlaşır. "Virajda yavaşla" diye ayrı bir
+    kural gerekmiyor, geometri bunu zaten veriyor.
+
+    Yön, hedefe kadarki zincirin doğrultusundan alınır; aracın anlık yönünden
+    değil. Böylece hedef her döngüde algıdan yeniden doğar ve odometri kayması
+    hedefe HİÇ birikmez — odometri yalnız boyuna ilerleme (istasyon takibi)
+    için kalır.
+    """
+    uygun = [(k, c) for k, c in enumerate(cizgi)
+             if c[2] in kabul and math.hypot(c[0], c[1]) <= maks_ileri]
+    if not uygun:
+        return None
+    k, (x, y, _) = uygun[-1]
+    if math.hypot(x, y) < min_ileri:
+        return None
+    ox, oy = (cizgi[k - 1][0], cizgi[k - 1][1]) if k > 0 else (0.0, 0.0)
+    return x, y, math.atan2(y - oy, x - ox)
+
+
+def ic_duvar_hedefi(ranges, angle_min: float, angle_increment: float,
+                    lidar_yaw: float, taraf: str, hedef_mesafe: float = 1.4,
+                    ileri_m: float = 2.0, maks_yanal: float = 2.2,
+                    menzil_min: float = 0.05, menzil_max: float = 12.0,
+                    komsu_m: float = 0.75, min_komsu: int = 3):
+    """
+    U dönüşünde iç duvarı takip eden Nav2 hedefi. Dönüş: `(x, y, yaw)` ya da None.
+
+    `taraf` ∈ {'sol', 'sag'} — iç duvarın aracın hangi yanında olduğu. Parkurda
+    sol U dönüşü (y=0 → y=10) sağa dönüştür, iç duvar SAĞDA; sağ U dönüşü
+    (y=10 → y=20) sola dönüştür, iç duvar SOLDA. Hangi dönüşte olunduğunu FSM
+    istasyon sırasından bilir.
+
+    NEDEN MERKEZ ÇİZGİSİ DEĞİL
+    ─────────────────────────────────────────────────────────────────────────
+    U dönüşü 180°'yi sensör menzili içinde tamamlıyor (iç yarıçap ~3,3 m).
+    Araçtan bakınca "ileride koridor" ile "yanımdaki koridor" aynı taramada iç
+    içe geçiyor; `koridor_merkez_cizgisi` orada parkur CAD'ine karşı 5–13 m
+    boyunca hedef üretemiyor. İç duvar ise virajın en sağlam özelliği: hep
+    yakın, hep görünür ve eğriliği koridorun eğriliği.
+
+    YÖNTEM
+    ─────────────────────────────────────────────────────────────────────────
+    Seçilen yandaki duvar noktalarından araca `ileri_m` uzaklıkta olanı seçilir,
+    komşularından yerel teğet kestirilir, hedef teğete dik olarak koridorun
+    içine `hedef_mesafe` kadar kaydırılır. Yön teğetten alınır. Duvar eğrildikçe
+    teğet de eğrilir — ayrıca viraj yarıçapı bilmeye gerek yok.
+
+    Teğet en az `min_komsu` komşu noktadan kestirilir; daha azıysa ölçüm
+    gürültüye açıktır ve hedef üretilmez. Hedefi zorlamak, duvara paralel
+    sanılan bir teğetle aracı duvara sürmek demektir.
+
+    VARSAYILANLAR PARKUR CAD'İNE KARŞI ÖLÇÜLDÜ
+    ─────────────────────────────────────────────────────────────────────────
+    `scripts/parkur_cad/koridor_dogrula.py` her poz için sanal tarama üretip
+    hedefi planlanmış gerçek yolla karşılaştırıyor. İki sayı belirleyici:
+
+    `ileri_m` KISA olmalı. İç yarıçap ~3,3 m'lik bir yayda 3,5 m ileriden
+    alınan duvar noktası yayın çok ötesine düşüyor ve düz kaydırma yoldan
+    sapıyor: 2,0 m'de ortalama sapma 0,60 m, 3,5 m'de 1,29–2,05 m.
+
+    `maks_yanal` DAR olmalı. U dönüşü keskin olduğu için DIŞ duvar da aracın
+    aynı yanına düşüyor; pencere genişse 'duvar noktası' iç duvar yerine dış
+    duvar seçiliyor ve hedef koridorun karşı tarafına atlıyor.
+    """
+    if angle_increment == 0.0 or not ranges or taraf not in ('sol', 'sag'):
+        return None
+    isaret = 1.0 if taraf == 'sol' else -1.0
+
+    duvar = []
+    for i, r in enumerate(ranges):
+        if r != r:
+            continue
+        if r < menzil_min or r > menzil_max:
+            continue
+        aci = angle_min + i * angle_increment + lidar_yaw
+        x, y = r * math.cos(aci), r * math.sin(aci)
+        yanal = y * isaret
+        if yanal <= 0.0 or yanal > maks_yanal:
+            continue
+        if x < -1.0:                       # arkada kalan duvar yön vermez
+            continue
+        duvar.append((x, y))
+    if len(duvar) < min_komsu + 1:
+        return None
+
+    # Araca `ileri_m` uzaklıktaki duvar noktası
+    p = min(duvar, key=lambda q: abs(math.hypot(q[0], q[1]) - ileri_m))
+    komsu = [q for q in duvar
+             if math.hypot(q[0] - p[0], q[1] - p[1]) <= komsu_m]
+    if len(komsu) < min_komsu:
+        return None
+
+    # Yerel teğet: komşuların baş-son farkı, ileri yöne bakacak şekilde
+    # Teğet, duvarın araca YAKIN ucundan UZAK ucuna doğru. Yönü ayrıca
+    # "ileri baksın" diye düzeltmek hata olur: U dönüşünün ortasında koridor
+    # yönü aracın gerisine dönebiliyor ve düzeltme normali duvarın İÇİNE
+    # çeviriyor — hedef o zaman duvarın arkasına düşüyor.
+    komsu.sort(key=lambda q: math.hypot(q[0], q[1]))
+    tx, ty = komsu[-1][0] - komsu[0][0], komsu[-1][1] - komsu[0][1]
+    L = math.hypot(tx, ty)
+    if L < 1e-6:
+        return None
+    tx, ty = tx / L, ty / L
+
+    # Teğete dik, duvardan koridorun içine doğru
+    nx, ny = ty * isaret, -tx * isaret
+    return p[0] + nx * hedef_mesafe, p[1] + ny * hedef_mesafe, math.atan2(ty, tx)
+
+
+def quat_yaw(qx: float, qy: float, qz: float, qw: float) -> float:
+    """Kuaterniyondan yaw [rad]. Düzlemsel dönüşümler için roll/pitch gerekmez."""
+    return math.atan2(2.0 * (qw * qz + qx * qy),
+                      1.0 - 2.0 * (qy * qy + qz * qz))
+
+
+def arac_hedefini_odoma_tasi(hedef, odom_poz):
+    """
+    Araç çerçevesinde üretilmiş `(x, y, yaw)` hedefini `odom` çerçevesine taşır.
+    `odom_poz` = (x, y, yaw), aracın odom'daki anlık pozu.
+
+    NEDEN GEREKLİ
+    ─────────────────────────────────────────────────────────────────────────
+    Hedef Nav2'ye araç çerçevesinde verilirse Nav2 onu HER YENİDEN PLANLAMADA
+    o anki araç pozuna göre yeniden çözer: hedef araçla birlikte kayar, asla
+    varılmaz ve hedef denetleyicisi hiç tetiklenmez. Araç çerçevesindeki
+    hedef "2 m ilerisi" demektir, "şu nokta" değil.
+
+    `odom` seçilir, `map` değil: odom sürüklenir ama SIÇRAMAZ. Hedef zaten
+    her döngüde taramadan yeniden doğduğu için 1,5 saniyelik ömrü boyunca
+    sürüklenmenin etkisi ölçülemeyecek kadar küçüktür; `map` ise SLAM
+    düzeltmesiyle sıçrayabilir ve hedefi bir anda metrelerce kaydırır.
+    """
+    ox, oy, oyaw = odom_poz
+    hx, hy, hyaw = hedef
+    return (ox + math.cos(oyaw) * hx - math.sin(oyaw) * hy,
+            oy + math.sin(oyaw) * hx + math.cos(oyaw) * hy,
+            oyaw + hyaw)
+
+
+def hedefleme_modu_sec(istenen: str, waypoint_dolu: bool):
+    """
+    Koşunun hangi hedefleme yoluyla sürüleceğini seçer. Dönüş: `(mod, gerekçe)`.
+
+    'harita'  waypoints.yaml'ın `map` çerçevesindeki koordinatları Nav2'ye
+              hedef olarak verilir. Koordinatların anlamlı olması için SLAM
+              haritası ile parkur arasındaki katı dönüşümün ölçülmüş olması
+              gerekir (`parkur_cad.donusum`).
+    'kayan'   hedef her döngüde LiDAR taramasından yeniden üretilir; `map`
+              çerçevesine de waypoint koordinatlarına da ihtiyaç yoktur.
+    'oto'     waypoint'ler doluysa 'harita', hepsi (0,0) ise 'kayan'.
+
+    Seçim KOŞU BAŞINDA bir kez yapılır. Koşu ortasında sessizce mod
+    değiştirmek en kötüsü olurdu: araç neden başka türlü davrandığını kimse
+    anlamaz, log'da da tek bir satır olarak kaybolur.
+
+    Tanınmayan bir değer 'oto' gibi ele alınır ve gerekçede bildirilir.
+    Çökmek koşuyu tamamen engellerdi; sessizce 'harita'ya düşmek ise
+    waypoint'ler (0,0) iken aracı hiç sürmeden "tamamlandı" dedirtirdi.
+    """
+    if istenen not in ('harita', 'kayan', 'oto'):
+        return ('harita' if waypoint_dolu else 'kayan'), f'gecersiz_istenen:{istenen}'
+    if istenen == 'oto':
+        return ('harita' if waypoint_dolu else 'kayan'), 'oto'
+    if istenen == 'harita' and not waypoint_dolu:
+        # İstenen açıkça 'harita' ise ona uyulur; ama bu koşunun parkuru hiç
+        # sürmeden biteceği anlamına gelir, çağıran yüksek sesle uyarmalı.
+        return 'harita', 'harita_ama_waypointler_bos'
+    return istenen, 'istendi'
+
+
+def kayan_hedef_karari(kat_edilen_m: float, mesafe_m: float,
+                       hedefsiz_ardisik: int, hedefsiz_sinir: int) -> str:
+    """
+    Kayan hedefle sürülen bir aşamanın devam edip etmeyeceği.
+    Dönüş: 'tamam' | 'hedef_yok' | 'devam'.
+
+    `kat_edilen_m` odometreden biriktirilen YOL UZUNLUĞU olmalı, başlangıç
+    noktasına olan uzaklık değil: U dönüşünde ikisi 22 m'ye karşı 11 m gibi
+    ayrışır ve kuş uçuşu ölçüt aşamayı yolun yarısında bitirirdi.
+
+    Varış ölçütü önce bakılır: mesafe tamamlandıysa hedef üretilememesi
+    önemsizdir, aşama zaten bitmiştir (istasyonun sonunda koridor açılıp
+    tarama koridor geometrisini tutmayabilir).
+    """
+    if mesafe_m > 0.0 and kat_edilen_m >= mesafe_m:
+        return 'tamam'
+    if hedefsiz_ardisik >= hedefsiz_sinir:
+        return 'hedef_yok'
+    return 'devam'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LİDAR MONTAJ AÇISI DÖNÜŞÜMLERİ
+#
+# LaserScan'in angle_min/angle_increment'i TARAMA çerçevesindedir. LiDAR
+# gövdeye dönük monte olduğu için tarama açısı ile araç açısı aynı şey
+# değildir; taramayı dizi olarak indeksleyen her düğüm dönüşü kendi
+# uygulamak zorundadır (TF yalnız costmap'e yerleştirmeyi düzeltir).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def tarama_acisi_arac(tarama_acisi: float, lidar_yaw: float) -> float:
+    """Tarama çerçevesindeki açıyı araç çerçevesine çevirir [rad, −π…π]."""
+    return math.remainder(tarama_acisi + lidar_yaw, 2.0 * math.pi)
+
+
+def arac_acisi_tarama(arac_acisi: float, lidar_yaw: float) -> float:
+    """Araç çerçevesindeki açıyı tarama çerçevesine çevirir [rad, −π…π]."""
+    return math.remainder(arac_acisi - lidar_yaw, 2.0 * math.pi)
+
+
+def aci_pencerede(aci: float, alt: float, ust: float) -> bool:
+    """
+    `aci` [alt, ust] penceresinde mi — SARMALI karşılaştırma.
+
+    Düz `alt <= aci <= ust` yetmez: montaj dönüşünden sonra pencere ±180°
+    sınırını aşabiliyor (örn. araç çerçevesinde bitişik olan iki açı tarama
+    çerçevesinde +176° ve −179° olarak görünür). Düz karşılaştırma o pencereyi
+    ikiye böler ve arada kalan huzmeleri sessizce atar.
+    """
+    genislik = math.remainder(ust - alt, 2.0 * math.pi)
+    if genislik < 0.0:
+        genislik += 2.0 * math.pi
+    fark = math.remainder(aci - alt, 2.0 * math.pi)
+    if fark < 0.0:
+        fark += 2.0 * math.pi
+    return fark <= genislik
+
+
+def tarama_kirpma_penceresi(alt_arac: float, ust_arac: float, lidar_yaw: float):
+    """
+    ARAÇ çerçevesinde tanımlı bir açı penceresini TARAMA çerçevesine taşır.
+    Dönüş: `(alt, ust)` — ikisi de [−π, π).
+
+    `alt > ust` çıkabilir ve bu bir hata DEĞİLDİR: montaj dönüşünden sonra
+    pencere ±180° sınırını aşar. Çağıran o durumda `>= alt VEYA <= ust`
+    uygulamalı; düz `alt <= a <= ust` pencereyi ikiye böler ve arada kalan
+    huzmeleri sessizce atar.
+
+    Pencere taramanın kendisine değil bir kez pencereye uygulanıyor: dönüşüm
+    her tarama için 600+ açıya değil, açılışta iki sayıya yapılıyor.
+    """
+    return (arac_acisi_tarama(alt_arac, lidar_yaw),
+            arac_acisi_tarama(ust_arac, lidar_yaw))
+
+
+def rollback_mudahale_gerekli(pitch_deg: float, velocity: float,
+                              komut_vx: float, komut_bayat: bool,
+                              pitch_esik_deg: float, hiz_esik: float,
+                              geri_komut_esigi: float = 0.05) -> bool:
+    """
+    Geri kayma korumasının müdahale edip etmeyeceği.
+
+    `rollback_riskli` yalnız fiziğe bakar: burun yukarı + hız negatif. Bu tek
+    başına yetmiyor, çünkü aynı tabloyu KASITLI bir geri gitme de üretir —
+    Nav2'nin BackUp kurtarması rampada devreye girerse koruma onu geri kayma
+    sanıp karşı komut basar ve iki katman birbirine karşı çalışır. Kurtarmanın
+    tek işi aracı planlanamaz pozdan çıkarmak; engellenirse araç orada kalır.
+
+    Bu yüzden karar komutu da görüyor: aşağı akışa geri komut gidiyorsa
+    müdahale edilmez.
+
+    `komut_bayat` iken KORUMA AÇIK kalır. Komutun ne olduğu bilinmiyorsa
+    varsayım "istenmeyen kayma" olmalı; ters varsayım, komut yayını kesildiği
+    anda korumayı sessizce kapatırdı — yani tam da korumaya en çok ihtiyaç
+    duyulan durumda.
+    """
+    if not rollback_riskli(pitch_deg, velocity, pitch_esik_deg, hiz_esik):
+        return False
+    if komut_bayat:
+        return True
+    return komut_vx >= -geri_komut_esigi

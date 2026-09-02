@@ -52,6 +52,15 @@ IMU_TOPIC = "/imu/data"
 # Frame      : odom → base_link
 ODOM_TOPIC = "/odom"
 
+# AS5600 ham ADC — kalibrasyon/teşhis
+# Mesaj tipi : std_msgs/UInt16MultiArray  → [sol_adc, sag_adc], 0–1023
+# Frekans    : 50 Hz (enkoder paketiyle aynı)
+# Üretici    : seri_kopru (yalnız ham_enkoder=True iken)
+# Tüketen    : scripts/sensor_dogrula.py --mod ham
+# Hangi analog pinin bağlı olduğunu, tur başına düşen tick'i ve okuma
+# gürültüsünü görmek için; normal sürüşte kapalıdır.
+ENKODER_HAM_TOPIC = "/enkoder/ham"
+
 # EKF çıktısı — Füzyon sonrası hassas konum
 # Mesaj tipi : nav_msgs/Odometry
 # Frekans    : 30 Hz
@@ -339,7 +348,15 @@ TARET_TILT_MAX =  45.0
 # IMU eşikleri (derece)
 IMU_PITCH_ENGEL_THRESHOLD = 5.0   # Dik engel — tork artışı
 IMU_PITCH_RAMP_THRESHOLD  = 15.0  # Rampa — yüksek tork
-IMU_ROLL_WARN_THRESHOLD   = 8.0   # Yan eğim — hız düşür
+# Şartname §6.5 %20 yan eğimden geçmeyi ZORUNLU tutuyor, §7.3 de aracın o
+# eğimde stabil olmasını istiyor. %20 = arctan(0.20) = 11,31°, yani uyarı
+# eşiği bunun altında kaldığı sürece zorunlu bir aşamada hız kısılır.
+IMU_ROLL_WARN_THRESHOLD   = 13.0  # Yan eğim — §6.5'in 11,31°'si + pay
+# ⚠️ Aşağıdaki iki eşik ÖLÇÜME BAĞLI, şu anki değerler devralınmış tahmindir.
+# Statik devrilme açısı  θ = arctan(iz_genişliği / (2 × ağırlık_merkezi_yük.))
+# formülüyle türetilir; iz genişliği §7.1 kapsamında hâlâ ölçülmedi (depoda
+# 0,50 / 0,67 / 0,900 diye üç değer var) ve ağırlık merkezi yüksekliği hiç
+# bilinmiyor. İkisi ölçülünce buradan yeniden hesaplanacak.
 IMU_ROLL_STOP_THRESHOLD   = 15.0  # Yan eğim — dur
 IMU_ROLL_ESTOP_THRESHOLD  = 20.0  # Devrilme — E-STOP
 IMU_PITCH_DOWN_THRESHOLD  = 15.0  # Yokuş aşağı fren modu
@@ -352,6 +369,13 @@ BATTERY_CRITICAL_SOC = 10.0  # Güvenli durdurma
 # EN AZ 1 saniye hedefte sabit kalmalı. ShootState bu süreyi yazılım
 # seviyesinde de garanti eder (donanım/Nano zamanlamasına tek başına güvenilmez).
 LASER_FIRE_DURATION = 1.0
+
+# RC mod anahtarı eşiği (µs) — arduino/include/config.h RC_MOD_ESIK ile AYNI
+# sayı olmak zorunda. Aynı kanalı (CH6 VRB potu) hem Mega hem mod_yoneticisi
+# okuyor: Mega eşiğin altında RC'yi doğrudan sürüp Jetson'ın sürüş paketlerini
+# yok sayar, üstünde Jetson'ı dinler. İki taraf farklı yerden bölerse potun
+# arada kaldığı bantta ROS ile Mega aynı anda farklı modda olur.
+RC_MOD_ESIK_US = 1500
 
 # Dik eğim bekleme süresi — §6.10 (saniye)
 RAMP_STOP_DURATION = 2.0
@@ -372,6 +396,13 @@ FREN_IVME_ESIK_MAX  = 5.0    # [m/s²] — üstünde tam fren (yüksek eşik = g
 FREN_TAM_DUR_ORAN   = 0.3    # hedef hız tam 0 olsa bile en fazla bu oranda fren (0-1)
 FREN_RAMP_PER_S     = 500.0  # [‰/s] fren yüzdesi değişim hızı sınırı — ani sıçramayı önler
 
+# Güvenlik dallarının (watchdog, E-STOP) yayınladığı fren değeri. SIFIR OLAMAZ:
+# firmware'de 0, "servis freni istemiyorum" demek ve kararı §7.5 park freni
+# durum makinesine devreder — makine de sıkmadan önce FREN_BEKLEME_MS bekler.
+# §6.10'un zorunlu 2 sn duruşu %45 eğimde bu pencereye düşüyor, o yüzden
+# güvenlik dalları beklemeyi atlayıp doğrudan tam fren istiyor.
+FREN_GUVENLI_DUR_BINDE = 1000
+
 # ─────────────────────────────────────────────
 # KONTROL TOPIC'LERİ (node'lar arası iç protokol)
 # ─────────────────────────────────────────────
@@ -390,6 +421,68 @@ E_STOP_FORCE_RC_TOPIC    = "/e_stop/force/rc"         # mod_yoneticisi → RC si
 # durumu artık sadece log'da kalmıyor, ROS2 üzerinden gözlemlenebilir.
 E_STOP_GPIO_FAULT_TOPIC = "/e_stop/gpio_fault"
 
+# watchdog, kritik topic'lerden biri bayatladığında hangisinin sustuğunu
+# yayınlar. Panoya bağlıdır — sessizce ölen bir sensör aksi halde ancak
+# davranış bozulunca fark ediliyor.
+SENSOR_FAULT_TOPIC = "/sensor/fault"   # String (arıza açıklaması)
+
+# §6.9 tümsekli bölümde parkurun ortalanması isteniyor; aracın tamamının aynı
+# tümsek dizisi üzerinden geçirilmesi §9'da −5 puan. Tümsek 20 cm taban /
+# 5 cm yükseklik (Şekil 4) — LiDAR düzlemi zeminden 55 cm'de olduğu için
+# tümseklerin kendisi HİÇ görünmüyor, tekerlek yerleştirme planlanamıyor.
+# Ölçülebilen ve kuralın ilk cümlesinin istediği şey koridorda ortalanmak:
+# §6.1 koridoru 3 m ve iki yanı 80 ± 10 cm bariyerli, ikisi de taramada var.
+ENGEBELI_SAPMA_TOPIC = "/engebeli/sapma"   # Float32 [m], + ise sağa kaymış
+
+KORIDOR_GENISLIGI_M     = 3.0    # §6.1 yol genişliği
+KORIDOR_SAPMA_UYARI_M   = 0.50   # bu kadar kayma sürekliyse loga uyarı
+KORIDOR_TOPLAM_TOLERANS = 0.60   # sol+sağ bu kadar sapabilir, fazlası koridor değil
+# Yan pencerelerin merkezi ±90°, LiDAR'ın gövdeye göre montaj dönüklüğü
+# (LIDAR_YAW_RAD) taramada değil TF'te uygulandığı için buradaki açılar
+# tarama çerçevesinde okunur ve montaj açısıyla kaydırılır.
+KORIDOR_PENCERE_RAD     = 0.26   # ±15° — duvarın düz kısmını yakalar
+
+# ─────────────────────────────────────────────
+# LİDAR MONTAJ AÇISI — TEK DOĞRULUK KAYNAĞI
+# ─────────────────────────────────────────────
+# LiDAR gövdeye 93,3° dönük monte (sahada huniyle çift yönlü kalibre edildi).
+# Bu dönüş TF'te de basılıyor (lydia_startup.sh LIDAR_YAW_RAD, urdf
+# lidar_joint) — Nav2 costmap yalnız TF'e baktığı için orada yeterli.
+#
+# ⚠️ AMA taramayı DİZİ OLARAK indeksleyen her düğüm bu dönüşü kendi
+# uygulamak zorundadır: LaserScan.angle_min/increment tarama çerçevesindedir,
+# araç çerçevesi değil. Bu atlandığı için bir dönem preprocessing aracın SAĞ
+# yanını komple `inf` yapıyor, kayar engel arayıcısı aracın SOLUNU tarıyor ve
+# koni füzyonu mesafeyi 93° yanlış yönden okuyordu — üçü de hata basmadan.
+#
+# Dönüşüm pure_logic.tarama_acisi_arac / arac_acisi_tarama'da.
+LIDAR_MONTAJ_YAW_RAD = 1.6284   # [rad] 93,3° — urdf lidar_joint ile AYNI sayı
+
+# Otonom sürüş komutunun bayatlama sınırı. mod_yoneticisi FULL_AUTO'da
+# /cmd_vel'i mux'a geçirir; yayıncı susarsa komut BAYATLAR. Süre
+# ackermann_converter'ın cmd_vel_timeout'uyla aynı tutuluyor.
+NAV2_CMD_BAYATLAMA_S = 0.5
+
+# ─────────────────────────────────────────────
+# KAYAN HEDEF — haritasız sürüş (pure_logic.koridor_merkez_cizgisi / ic_duvar_hedefi)
+# ─────────────────────────────────────────────
+# Hedef `map` çerçevesinde sabit bir nokta değil, her döngüde taramadan
+# yeniden üretilen bir nokta. Bu yüzden SLAM haritasının doğruluğuna da
+# waypoint koordinatlarına da ihtiyaç duymaz; odometri yalnız "bu aşamada ne
+# kadar yol gittim" için kullanılır ve hedefe HİÇ birikmez.
+KAYAN_HEDEF_PERIYOT_S  = 1.5    # [s] yeniden hedefleme periyodu (~0,67 Hz)
+# Periyot bilerek Nav2'nin planlama süresinden (max_planning_time 5 s) kısa
+# değil, uzun tutuldu: her yeni hedef öncekini preempt ediyor, çok sık
+# gönderilirse planlayıcı hiçbir planı bitiremeden yenisine başlar.
+# Hedef taramadan araç çerçevesinde doğar ama Nav2'ye ODOM çerçevesinde
+# gönderilir: araç çerçevesindeki bir hedefi Nav2 her yeniden planlamada
+# o anki poza göre yeniden çözer, yani hedef araçla birlikte kayar ve
+# asla varılmaz. odom sürüklenir ama sıçramaz; hedefin ömrü zaten bir
+# periyot (1,5 s) olduğu için sürüklenme ölçülemeyecek kadar küçük kalır.
+KAYAN_HEDEF_FRAME      = "odom"
+KAYAN_HEDEF_YOK_SINIR  = 8      # ardışık bu kadar döngüde hedef üretilemezse aşama başarısız
+KAYAN_ODOM_BAYATLAMA_S = 1.0    # [s] /odometry/filtered bu süre gelmezse yol ölçülemiyor demektir
+
 # Mod yönetimi
 MOD_KOMUT_TOPIC   = "/mod/komut"    # yazılımsal/GCS mod değiştirme (UInt8)
 MOD_AKTIF_TOPIC   = "/mod/aktif"    # geçerli mod (UInt8)
@@ -401,6 +494,26 @@ MISSION_STATUS_TOPIC = "/mission_status"  # görev sonucu (String)
 MISYON_AKTIF_TOPIC   = "/misyon/aktif"   # kayıt + durum göstergesi (Bool)
 SHOOT_CMD_TOPIC      = "/shoot_command"   # lazer tetikleyici (Bool)
 MISYON_WP_INDEX_TOPIC = "/misyon/wp_index"  # mevcut waypoint indeksi (UInt8)
+MISYON_KALAN_SURE_TOPIC = "/misyon/kalan_sure"  # koşu saatinde kalan süre (Float32)
+
+# Koşu süresi — Şartname §6.12: her koşu, atış dahil, en fazla 15 dakikadır.
+# Süre dolduğunda takım geçtiği aşamaların puanını korur ama parkurdan çıkmak
+# zorundadır. Saat bir güvenlik sınırı değil doğrudan puan kaynağıdır: §9'da
+# "koşu tamamlama süresi" tek başına en yüksek 100 puanlık kalemdir, atıştan
+# (50) ve konilerden (50) büyüktür. Saat koşunun başladığı anda işler ve
+# manuel moda geçilse de DURMAZ — hakem kronometresi de durmaz.
+KOSU_SURESI_S = 900.0
+
+# Pas hakkı — Şartname §9: her koşuda YALNIZCA 1 aşama pas geçilebilir ve pas
+# geçilen aşamanın alınabilecek en yüksek puanı eksi olarak yazılır. Pas, aracın
+# bir sonraki hedefe sürmesi değildir: takım üyeleri parkura girip aracı elle
+# taşır. Yani bu bayrak otonom bir kaçış yolu değil, sahadaki insan kararının
+# yazılıma bildirilmesidir.
+PAS_HAKKI = 1
+
+# Şartname §9: hızlanma parkuru ve otonom koşuda trafik konileri pas geçilemez.
+# Konfigürasyon ne derse desin bu iki aşama atlanmaz.
+PAS_GECILEMEZ = ("KONİLİ_YOL", "HIZLANMA_PARKURU")
 
 # RC kumanda kanalları
 # Float32MultiArray [ch1_gaz, ch2_direksiyon/pan, ch5_mod, ch3_aux/lazer,

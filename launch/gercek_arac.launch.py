@@ -31,6 +31,27 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 
+def _harita_olcusu(pgm_yolu: str) -> str:
+    """PGM başlığından harita boyutu (metre). Okunamazsa '?'."""
+    try:
+        with open(pgm_yolu, 'rb') as f:
+            alan = f.read(64).split()
+        cozunurluk = 0.05   # maps/*.yaml resolution ile aynı varsayım
+        return (f'{int(alan[1]) * cozunurluk:.1f} x '
+                f'{int(alan[2]) * cozunurluk:.1f} m')
+    except Exception:
+        return '?'
+
+
+def _dosya_tarihi(yol: str) -> str:
+    import datetime
+    try:
+        return datetime.datetime.fromtimestamp(
+            os.path.getmtime(yol)).strftime('%Y-%m-%d')
+    except OSError:
+        return '?'
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory('teknofest_ika')
     nav2_pkg  = get_package_share_directory('nav2_bringup')
@@ -75,16 +96,38 @@ def generate_launch_description():
             'range_min':      0.1,
             'frequency':      10.0,
             'invalid_range_is_inf': False,
-        }]
+        }],
+        remappings=[('/scan', '/scan_raw')]
     )
 
-    # ── Orbbec Gemini 335L Derinlik Kamerası ─────────────────────────────────
-    # Sürücü: orbbec_camera
-    # Yayınlanan topic: /camera/depth/color/points (PointCloud2)
-    orbbec_camera = IncludeLaunchDescription(
+    # ── Scan Relay — timestamp ve frame_id düzeltici ──────────────────────────
+    scan_relay = Node(
+        package='teknofest_ika',
+        executable='scan_relay',
+        name='scan_relay',
+        output='screen',
+    )
+
+    # ── OS30A Derinlik Kamerası (eYs3D BMVM0S30A) ────────────────────────────
+    # Sürücü: eYs3D HD-DM-ROS2-SDK  →  package: dm_preview
+    # Yayınlanan topic: /apc/points/data_raw (PointCloud2)
+    # Kurulum: terminalden aşağıdaki adımları izle (bir kez yapılır):
+    #   git clone https://github.com/eYs3D/HD-DM-ROS2-SDK-Release.git ~/eys3d_ws/src/dm_preview
+    #   cd ~/eys3d_ws && rosdep install -i --from-path src -y
+    #   colcon build --symlink-install
+    #   echo "source ~/eys3d_ws/install/setup.bash" >> ~/.bashrc
+    #
+    # DEĞİŞİKLİK (2026-07-15, sahada doğrulandı): dm_preview paketinin
+    # eys3d_ws derlemesi eksik/bozuk (vendor .so dosyası ve stereo_msgs
+    # bağımlılığı eksik, "package 'dm_preview' not found" ile TÜM launch'ı
+    # çökertiyordu). Aynı donanım için ÇALIŞAN bir alternatif paket var:
+    # ydlidar_os30a (dev_ws'te ayrı kurulu). Elle kısaltılmış parametrelerle
+    # değil, resmi launch dosyasıyla başlatılmalı — aksi halde derinlik
+    # akışı hiç üretilmiyor (2026-07-10 oturumunda bulunan bilinen sorun).
+    os30a = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('orbbec_camera'),
-                         'launch', 'gemini335.launch.py')
+            os.path.join(get_package_share_directory('ydlidar_os30a'),
+                         'launch', 'apc_camera_launch.py')
         )
     )
 
@@ -111,7 +154,11 @@ def generate_launch_description():
         output='screen',
         parameters=[{'use_sim_time': False,
                      'port': '/dev/mega',
-                     'baud': 115200}]
+                     'baud': 115200,
+                     # odom → base_footprint TF'i aşağıdaki EKF yayınlar
+                     'publish_tf': False,
+                     # tek enkoder Mega'nın A0'ında; A1 boşta gürültü okur
+                     'enkoder_kanali': 'sol'}]
     )
 
     # ── EKF (odom + IMU füzyon) ───────────────────────────────────────────────
@@ -132,16 +179,26 @@ def generate_launch_description():
 
     if os.path.exists(gercek_harita):
         # Harita var → localization modu (haritayı yükle, yeni alan haritalama)
+        # Hangi haritaya localize olunduğu EKRANA BASILIYOR: dosyanın varlığı
+        # tek başına doğruluğunun kanıtı değil. Burada bir kez 16,05 x 1,85 m'lik
+        # bir koridor testi haritası kalmış ve araç parkur yerine ona localize
+        # olacak duruma gelmişti; kimse fark etmezdi çünkü mod sessizce seçiliyor.
         slam_exe = 'localization_slam_toolbox_node'
         slam_extra = {
             'use_sim_time': False,
             'map_file_name': os.path.splitext(gercek_harita)[0],
             'map_start_at_dock': True,
         }
+        print(f'[SLAM] LOCALIZATION modu — harita: {gercek_harita}\n'
+              f'[SLAM]   boyut: {_harita_olcusu(gercek_harita)}, '
+              f'tarih: {_dosya_tarihi(gercek_harita)}\n'
+              f'[SLAM]   Bu harita parkurun DEĞİLSE araç yanlış yere localize olur.')
     else:
         # Harita yok → mapping modu (sahayı haritala)
         slam_exe = 'async_slam_toolbox_node'
         slam_extra = {'use_sim_time': False}
+        print('[SLAM] MAPPING modu — harita sıfırdan kuruluyor, map çerçevesinin '
+              'orijini aracın şu anki yeri.')
 
     slam = Node(
         package='slam_toolbox',
@@ -170,7 +227,7 @@ def generate_launch_description():
     ackermann = Node(
         package='teknofest_ika', executable='ackermann_converter',
         name='ackermann_converter', output='screen',
-        parameters=[{'use_sim_time': False, 'wheelbase': 0.55,
+        parameters=[{'use_sim_time': False, 'wheelbase': 1.40,
                      'max_steering_angle': 0.5236, 'max_speed': 3.0}]
     )
     veri_paketi = Node(
@@ -198,7 +255,7 @@ def generate_launch_description():
         name='kayar_engel_kalman', output='screen',
         parameters=[{'use_sim_time': False}]
     )
-    # Mod Yöneticisi — MANUAL/SEMI_AUTO/FULL_AUTO geçişleri ve cmd_vel mux
+    # Mod Yöneticisi — MANUAL/FULL_AUTO geçişleri ve cmd_vel mux
     mod_yoneticisi = Node(
         package='teknofest_ika', executable='mod_yoneticisi',
         name='mod_yoneticisi', output='screen',
@@ -211,14 +268,16 @@ def generate_launch_description():
         parameters=[{'use_sim_time': False,
                      'port': '/dev/ttyCH341USB0', 'baud': 115200}]
     )
-    # NOT: koni_costmap.py kasıtlı olarak başlatılmıyor — /cone_positions
-    # (PoseArray) üreticisi yok, koni tespiti cone_fusion_node tarafından
-    # LiDAR+YOLO füzyonuyla doğrudan /costmap/cone_cloud'a yazılıyor (aşağıda
-    # 'cone_fusion'). koni_costmap.py, ileride ayrı bir PoseArray tabanlı
-    # koni kaynağı eklenirse kullanılabilecek bağımsız/yedek bir araç olarak
-    # repo'da bırakıldı; Node nesnesi burada OLUŞTURULMUYOR (önceden
-    # oluşturulup hiç launch edilmeyen, kafa karıştırıcı bir kalıntıydı).
+    # NOT: Koni tespiti costmap'e yalnız cone_fusion_node üzerinden girer
+    # (aşağıda 'cone_fusion'), LiDAR+YOLO füzyonuyla /costmap/cone_cloud'a.
+    # Ayrı bir PoseArray tabanlı koni kaynağı yok.
 
+    # Kayar Engel Costmap — Kalman aktifken /scan → Nav2 ObstacleLayer
+    kayar_costmap = Node(
+        package='teknofest_ika', executable='kayar_engel_costmap',
+        name='kayar_engel_costmap', output='screen',
+        parameters=[{'use_sim_time': False}]
+    )
     misyon_fsm = Node(
         package='teknofest_ika', executable='misyon_fsm',
         name='misyon_fsm', output='screen',
@@ -263,14 +322,14 @@ def generate_launch_description():
     # /camera/front/image_raw ve /camera/taret/image_raw'a abone olur — remap
     # gerekmez (önceki remap-bağımlı tasarım, nişan kamerasının hiç remap
     # edilmemesi nedeniyle hiç işlenmemesine yol açmıştı).
-    # /depth/points ← Orbbec derinlik kamerasından (/camera/depth/color/points)
-    # /scan_lidar ← preprocessing_node.py SCAN_LIDAR_TOPIC ile direkt abone, remap gerekmez
+    # /depth/points → OS30A derinlik kamerasından (/apc/points/data_raw)
+    # /scan_lidar → preprocessing_node.py SCAN_LIDAR_TOPIC ile direkt abone, remap gerekmez
     preprocessing = Node(
         package='teknofest_ika', executable='preprocessing_node',
         name='preprocessing_node', output='screen',
         parameters=[{'use_sim_time': False}],
         remappings=[
-            ('/depth/points', '/camera/depth/color/points'),
+            ('/depth/points', '/apc/points/data_raw'),
         ]
     )
 
@@ -352,10 +411,29 @@ def generate_launch_description():
     )
 
     # ── Watchdog (Kritik topic sağlık izleme) ─────────────────────────────────
+    # Bu launch dosyasında sürücü /scan_raw'a remap edilip scan_relay
+    # /scan_lidar basıyor; Nav2 ve EKF de burada her zaman ayağa kalkıyor.
+    # (Boot betiği ikisini de farklı kuruyor, orada parametreler farklı.)
     watchdog = Node(
         package='teknofest_ika', executable='watchdog',
         name='watchdog', output='screen',
-        parameters=[{'use_sim_time': False}]
+        parameters=[{'use_sim_time': False,
+                     'nav2_aktif': True,
+                     'ham_tarama_topic': '/scan_lidar'}]
+    )
+
+    # ── YOLO Adapter — Detection2DArray → /ika/detections JSON köprüsü ───────
+    # yolo_detection_node'dan sonra başlamalı (13s+)
+    # img_cx/img_cy: YOLO giriş boyutuna göre (preprocessing_node 640x640 → 320,320)
+    yolo_adapter = Node(
+        package='teknofest_ika', executable='yolo_adapter_node',
+        name='yolo_adapter_node', output='screen',
+        parameters=[{
+            'use_sim_time':   False,
+            'img_cx':         320.0,
+            'img_cy':         320.0,
+            'conf_threshold': 0.75,  # topics.py YOLO_CONFIDENCE_THRESHOLD ile uyumlu
+        }]
     )
 
     # ── Microcase 720P Webcam'ler — Şartname §6.12: 3 kamera zorunlu ────────────
@@ -422,7 +500,7 @@ def generate_launch_description():
     return LaunchDescription([
         rsp,
         TimerAction(period=0.5,  actions=[e_stop]),
-        TimerAction(period=1.0,  actions=[seri_kopru, lidar, orbbec_camera,
+        TimerAction(period=1.0,  actions=[seri_kopru, lidar, scan_relay, os30a,
                                           imx258,
                                           webcam_taret, webcam_geri]),
         TimerAction(period=2.0,  actions=[preprocessing]),
@@ -432,11 +510,11 @@ def generate_launch_description():
         TimerAction(period=10.0, actions=[ackermann, imu_guvenlik,
                                           anti_rollback, mod_yoneticisi]),
         TimerAction(period=11.5, actions=[veri_paketi, terrain_adapter,
-                                          kayar_kalman,
+                                          kayar_kalman, kayar_costmap,
                                           taret_rc_koprusu]),
         TimerAction(period=12.0, actions=[watchdog]),
         TimerAction(period=13.0, actions=[yolo_detection, cone_fusion,
                                           targeting, servo_controller]),
-
+        TimerAction(period=13.5, actions=[yolo_adapter]),
         TimerAction(period=16.0, actions=[misyon_fsm]),
     ])

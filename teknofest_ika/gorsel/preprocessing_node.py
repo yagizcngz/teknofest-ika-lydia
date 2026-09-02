@@ -20,8 +20,9 @@ from sensor_msgs.msg import Image, LaserScan, PointCloud2, PointField
 from cv_bridge import CvBridge
 import struct
 
+from teknofest_ika.otonomi.pure_logic import tarama_kirpma_penceresi
 from teknofest_ika.otonomi.topics import (
-    SCAN_LIDAR_TOPIC,
+    SCAN_LIDAR_TOPIC, LIDAR_MONTAJ_YAW_RAD,
     SCAN_FILTERED_TOPIC,
     CAMERA_PROCESSED_TOPIC,
     CAMERA_IMAGE_TOPIC,
@@ -46,11 +47,24 @@ class PreprocessingNode(Node):
         self.declare_parameter("enable_rain_inpaint", True)
         self.declare_parameter("rain_inpaint_radius", 3)
         self.declare_parameter("rain_blob_max_area_px", 120)
+        # ⚠️ Bu pencere ARAÇ çerçevesinde tanımlıdır (0° = ileri), tarama
+        # çerçevesinde değil. LiDAR gövdeye 93,3° dönük monte olduğu için ikisi
+        # aynı şey değil: pencere tarama açılarına doğrudan uygulandığında
+        # aracın SAĞ yanı (−131,7°…−41,7°) komple `inf` oluyordu ve bunu
+        # /scan/filtered'ı okuyan herkes miras alıyordu — Nav2'nin iki
+        # costmap'i, kayar engel, koni füzyonu, §6.9 koridor ölçümü. Hiçbiri
+        # hata basmıyordu, yalnız sağdaki bariyer yok sayılıyordu.
         self.declare_parameter("lidar_angle_min_deg", -135.0)
         self.declare_parameter("lidar_angle_max_deg", 135.0)
+        self.declare_parameter("lidar_montaj_yaw_rad", LIDAR_MONTAJ_YAW_RAD)
         self.declare_parameter("lidar_ma_window", 5)
         self.declare_parameter("depth_ror_nb_points", 6)
         self.declare_parameter("depth_ror_radius", 0.05)
+        # Derinlik nokta bulutu filtresi. Çıktısı (/depth/points/filtered)
+        # yalnız Nav2 costmap katmanına besleniyordu; Nav2 kapalı olduğu
+        # sürece kare başına KD-tree kurup Python'da gezmek boşa CPU demek.
+        # Nav2 geri açıldığında bu parametre true yapılır.
+        self.declare_parameter("derinlik_isle", False)
 
         self._flip_ana = bool(self.get_parameter("flip_ana").value)
         self._flip_aux = bool(self.get_parameter("flip_yardimci").value)
@@ -64,8 +78,16 @@ class PreprocessingNode(Node):
         self.lidar_angle_min = math.radians(self.get_parameter("lidar_angle_min_deg").value)
         self.lidar_angle_max = math.radians(self.get_parameter("lidar_angle_max_deg").value)
         self.lidar_ma_window = self.get_parameter("lidar_ma_window").value
+        self._lidar_yaw = float(self.get_parameter("lidar_montaj_yaw_rad").value)
+        # Pencere bir kez tarama çerçevesine taşınıyor; her taramada 600+ açıyı
+        # çevirmeye gerek yok. alt > ust çıkabilir — pencere ±180°'yi aşıyor
+        # demektir, aşağıda VEYA ile uygulanır.
+        self._kirp_alt, self._kirp_ust = tarama_kirpma_penceresi(
+            self.lidar_angle_min, self.lidar_angle_max, self._lidar_yaw)
+        self._kirp_sarmali = self._kirp_alt > self._kirp_ust
         self.ror_nb_points = self.get_parameter("depth_ror_nb_points").value
         self.ror_radius = self.get_parameter("depth_ror_radius").value
+        self._derinlik_isle = bool(self.get_parameter("derinlik_isle").value)
 
         self.bridge = CvBridge()
         self.ema_main = None
@@ -80,7 +102,9 @@ class PreprocessingNode(Node):
         # için ayrı bir nişan kamerası gerekli; targeting_node bu çıkışı okur.
         self.pub_taret = self.create_publisher(Image, CAMERA_TARET_PROCESSED_TOPIC, 10)
         self.pub_scan = self.create_publisher(LaserScan, SCAN_FILTERED_TOPIC, 10)
-        self.pub_depth = self.create_publisher(PointCloud2, "/depth/points/filtered", 10)
+        self.pub_depth = (self.create_publisher(
+            PointCloud2, "/depth/points/filtered", 10)
+            if self._derinlik_isle else None)
 
         # Subscribers — gerçek topic adları doğrudan topics.py'den alınır,
         # böylece launch dosyasında unutulabilecek bir remap'e bağımlı kalınmaz
@@ -102,11 +126,16 @@ class PreprocessingNode(Node):
         self.sub_scan = self.create_subscription(
             LaserScan, SCAN_LIDAR_TOPIC,
             self.cb_scan, qos_profile_sensor_data)
-        self.sub_depth = self.create_subscription(
+        # Aboneliğin kendisi koşullu: yayıncı susmasa da işlenmemiş bulut
+        # DDS'ten çekilmez, serileştirme ve KD-tree maliyeti hiç doğmaz.
+        self.sub_depth = (self.create_subscription(
             PointCloud2, "/depth/points",
             self.cb_depth, qos_profile_sensor_data)
+            if self._derinlik_isle else None)
 
-        self.get_logger().info("PreprocessingNode started.")
+        self.get_logger().info(
+            "PreprocessingNode started (derinlik_isle={}).".format(
+                self._derinlik_isle))
 
     # ------------------------------------------------------------------
     # Camera callbacks
@@ -191,13 +220,20 @@ class PreprocessingNode(Node):
     # ------------------------------------------------------------------
     def cb_scan(self, msg: LaserScan):
         ranges = np.array(msg.ranges, dtype=np.float32)
-        angles = np.arange(msg.angle_min, msg.angle_max + msg.angle_increment / 2, msg.angle_increment)
+        # Açılar dizinin KENDİ uzunluğundan türetiliyor: angle_max'tan üretmek
+        # yuvarlama yüzünden bir eleman eksik/fazla dizi verebiliyor ve maske
+        # boyutu tutmayınca callback her taramada patlıyordu.
+        tarama_acilari = (msg.angle_min
+                          + np.arange(len(ranges), dtype=np.float32) * msg.angle_increment)
 
-        if len(angles) > len(ranges):
-            angles = angles[:len(ranges)]
-
-        # 1) Angle clipping
-        mask = (angles >= self.lidar_angle_min) & (angles <= self.lidar_angle_max)
+        # 1) Angle clipping — pencere ARAÇ çerçevesinde tanımlı, açılışta
+        #    tarama çerçevesine taşındı (bkz. __init__).
+        if self._kirp_sarmali:
+            mask = ((tarama_acilari >= self._kirp_alt)
+                    | (tarama_acilari <= self._kirp_ust))
+        else:
+            mask = ((tarama_acilari >= self._kirp_alt)
+                    & (tarama_acilari <= self._kirp_ust))
         # We keep full array but set out-of-range to inf so Nav2 ignores them
         filtered = ranges.copy()
         filtered[~mask] = float('inf')

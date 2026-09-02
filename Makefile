@@ -12,8 +12,10 @@ PIP           := pip3
 # --- Temel Komutlar ---
 
 build:
-	@echo "==> colcon build --symlink-install --packages-select $(PACKAGE)"
-	cd $(WORKSPACE) && colcon build --symlink-install --packages-select $(PACKAGE)
+	@echo "==> colcon build --packages-select $(PACKAGE)"
+	# --symlink-install YOK: aractaki install/ kopya tabanli, bayrakla derlemek
+	# maps/teknofest_harita.pgm uzerinde [Errno 2] verip install alanini bozar.
+	cd $(WORKSPACE) && colcon build --packages-select $(PACKAGE)
 
 test:
 	@echo "==> colcon test --packages-select $(PACKAGE)"
@@ -63,7 +65,7 @@ unit-test:
 
 help:
 	@echo "LYDIA IKA Makefile Hedefleri"
-	@echo "  build        - colcon build --symlink-install"
+	@echo "  build        - colcon build (--symlink-install YOK, arac icin)"
 	@echo "  test         - colcon test + sonuc raporu"
 	@echo "  unit-test    - Donanim gerektirmeyen birim testleri"
 	@echo "  harita       - Haritalama modu baslat"
