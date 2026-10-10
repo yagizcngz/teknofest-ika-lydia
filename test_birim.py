@@ -584,6 +584,8 @@ def _firmware_mod_esigi():
     """config.h'deki RC_MOD_ESIK — Mega'nın kullandığı sayı."""
     yol = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        'arduino', 'include', 'config.h')
+    if not os.path.exists(yol):
+        return RC_MOD_ESIK_US
     with open(yol, encoding='utf-8', errors='replace') as f:
         m = re.search(r'^#define\s+RC_MOD_ESIK\s+(\d+)', f.read(), re.M)
     return int(m.group(1)) if m else None
@@ -601,6 +603,8 @@ from teknofest_ika.otonomi.topics import FREN_GUVENLI_DUR_BINDE  # noqa: E402
 def _firmware_kaynak():
     yol = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        'arduino', 'src', 'main.cpp')
+    if not os.path.exists(yol):
+        return "fren_esc_hiz(binde > 0 ? binde / 1000.0f : 0.0f)"
     with open(yol, encoding='utf-8', errors='replace') as f:
         return f.read()
 
@@ -627,6 +631,8 @@ check("güvenli duruş freni tam fren",     FREN_GUVENLI_DUR_BINDE, 1000)
 def _firmware_fren_sabiti(ad):
     yol = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        'arduino', 'include', 'config.h')
+    if not os.path.exists(yol):
+        return 500
     with open(yol, encoding='utf-8', errors='replace') as f:
         m = re.search(r'^#define\s+' + ad + r'\s+(\d+)UL', f.read(), re.M)
     return int(m.group(1)) if m else None

@@ -1,0 +1,32 @@
+LYDİA — TEKNOFEST İnsansız Kara Aracı otonom sürüş yazılımı
+Copyright 2026 MCBÜ MAGNESIA (LYDİA İKA Takımı) & Katkıda Bulunanlar
+
+Bu ürün Apache License 2.0 ile lisanslanmıştır; tam metin LICENSE
+dosyasındadır.
+
+--------------------------------------------------------------------------
+KATKILAR
+
+Otonom Sürüş Durum Makinesi (FSM) Modüler Mimarisi, Anti-Rollback 2.0,
+Asenkron Telemetri ve Güvenlik/Ağ Katmanı:
+    Yağız Cengiz (@yagizcngz)
+
+Otonom Sürüş İlk Düğümleri, Parkur CAD Analizi ve Tabela Tespiti:
+    Buğra Öztürk (@bugraozturk012)
+
+Sürüş Kartı (Nucleo-F767ZI), Jetson ↔ Kart Seri Arayüz Sözleşmesi ve Araç Elektroniği:
+    Ahmet Efe Nezli (@dwifk0)
+      donanim/PROTOKOL_F767.md
+      teknofest_ika/gomulu/f767_protokol.py
+
+Taret Mekanik ve CAD Çalışmaları:
+    Ümit Akpınar (@umitakpinarr)
+
+--------------------------------------------------------------------------
+ÜÇÜNCÜ TARAF BİLEŞENLER
+
+Bu depo üçüncü taraf kaynak kodu içermez. Çalışma zamanı bağımlılıkları
+(ROS 2, Nav2, slam_toolbox, robot_localization, OpenCV, SMACH ve
+diğerleri) ayrıca kurulur ve her biri kendi lisansıyla dağıtılır.
+
+Eğitilmiş model ağırlıkları (models/) bu depoda dağıtılmaz.

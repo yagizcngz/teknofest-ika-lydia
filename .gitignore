@@ -4,6 +4,7 @@ log/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 .vscode/
 *.bag
 *.gv
@@ -12,5 +13,4 @@ maps/*.pgm
 maps/*.yaml
 models/
 *Zone.Identifier
-arduino/.pio/
 scripts/parkur_cad/donus_raporu.png
